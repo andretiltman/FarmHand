@@ -30,6 +30,8 @@ export interface PlantPhoto {
   /** Permanent file URI on device (data: URL on web). */
   uri: string;
   takenAt: string;
+  /** When it was added to FarmHand (takenAt can be set to an older date). Absent on older photos. */
+  addedAt?: string;
 }
 
 /** Bookkeeping that lets two phones merge their copies of the same item (see sync.ts). */

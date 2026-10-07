@@ -9,7 +9,10 @@ import { Deleted, MergeResult, SyncSnapshot } from '../sync';
 import {
   packPlants,
   packSync,
+  PhotoChoice,
+  photosToSend,
   Received,
+  RECENT_PHOTO_DAYS,
   syncFileName,
   TransferFile,
   transferFileName,
@@ -49,6 +52,7 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
   const [step, setStep] = useState<Step>({ kind: 'menu' });
   const [selected, setSelected] = useState<string[]>([]);
   const [includePhotos, setIncludePhotos] = useState(true);
+  const [syncPhotos, setSyncPhotos] = useState<PhotoChoice>('recent');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +61,7 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
       setStep({ kind: 'menu' });
       setSelected([]);
       setIncludePhotos(true);
+      setSyncPhotos('recent');
       setError(null);
     }
   }, [visible]);
@@ -79,7 +84,9 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
   };
 
   const chosen = plants.filter((p) => selected.includes(p.id));
-  const photoCount = (step.kind === 'sync' ? plants : chosen).reduce((n, p) => n + p.photos.length, 0);
+  const photoCount = chosen.reduce((n, p) => n + p.photos.length, 0);
+  const syncPhotoCount = (choice: PhotoChoice) =>
+    plants.reduce((n, p) => n + photosToSend(p.photos, choice).length, 0);
 
   const send = () =>
     run(async () => {
@@ -90,7 +97,7 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
 
   const sendSync = () =>
     run(async () => {
-      const text = await packSync(await getDeviceId(), items, deletedRef.current, includePhotos);
+      const text = await packSync(await getDeviceId(), items, deletedRef.current, syncPhotos);
       await shareTransferFile(syncFileName(), text);
       onClose();
     });
@@ -240,7 +247,42 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
           <Text style={[styles.hint, styles.spaced]}>
             Both on the same Home Assistant? Turn on 🏠 → Sync with other phones and this happens automatically.
           </Text>
-          {photoSwitch}
+          {syncPhotoCount('all') > 0 ? (
+            <>
+              <Text style={[styles.switchLabel, styles.photosLabel]}>Photos</Text>
+              <View style={styles.segments}>
+                {(
+                  [
+                    ['none', 'None'],
+                    ['recent', `Last ${RECENT_PHOTO_DAYS} days`],
+                    ['all', 'All'],
+                  ] as const
+                ).map(([choice, label]) => {
+                  const on = syncPhotos === choice;
+                  return (
+                    <Pressable
+                      key={choice}
+                      onPress={() => setSyncPhotos(choice)}
+                      style={({ pressed }) => [styles.segment, on && styles.segmentOn, pressed && styles.pressed]}
+                      accessibilityRole="radio"
+                      aria-checked={on}
+                    >
+                      <Text style={[styles.segmentText, on && styles.segmentTextOn]}>{label}</Text>
+                      {choice !== 'none' ? (
+                        <Text style={[styles.segmentCount, on && styles.segmentTextOn]}>
+                          {syncPhotoCount(choice)} photo{syncPhotoCount(choice) === 1 ? '' : 's'}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={styles.hint}>
+                Send all photos the first time you sync. After that, the last {RECENT_PHOTO_DAYS} days keeps the file
+                small – photos you leave out stay on the other phone.
+              </Text>
+            </>
+          ) : null}
           {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
         </ScrollView>
       );
@@ -438,6 +480,23 @@ const styles = StyleSheet.create({
   syncEmoji: { fontSize: 34 },
   syncDesc: { fontSize: 13, color: colors.muted, marginTop: 2 },
   spaced: { marginTop: 12 },
+  photosLabel: { marginTop: 18, marginBottom: 8 },
+  segments: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  segment: {
+    flex: 1,
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  segmentOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  segmentText: { fontSize: 14, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  segmentCount: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  segmentTextOn: { color: colors.primaryText },
   noMargin: { marginTop: 0 },
   list: { flexGrow: 0 },
   selectAll: { alignSelf: 'flex-end', paddingVertical: 4, marginBottom: 8 },

@@ -152,7 +152,8 @@ export function useItems() {
       for (const photo of plant.photos) {
         const photoId = newId();
         try {
-          photos.push({ id: photoId, uri: await saveDataUrlPhoto(photo.uri, photoId), takenAt: photo.takenAt });
+          const uri = await saveDataUrlPhoto(photo.uri, photoId);
+          photos.push({ id: photoId, uri, takenAt: photo.takenAt, addedAt: photo.addedAt });
         } catch (e) {
           console.warn('Skipping a photo that could not be saved', e);
         }
@@ -232,7 +233,8 @@ export function useItems() {
     async (id: string, pickedUri: string) => {
       const photoId = newId();
       const uri = await savePhoto(pickedUri, photoId);
-      const photo: PlantPhoto = { id: photoId, uri, takenAt: new Date().toISOString() };
+      const now = new Date().toISOString();
+      const photo: PlantPhoto = { id: photoId, uri, takenAt: now, addedAt: now };
       updatePlant(id, (p) => ({ ...p, photos: [photo, ...p.photos] }));
     },
     [updatePlant],

@@ -1,6 +1,6 @@
 import { photoToDataUrl } from './photoStorage';
 import { checkSnapshot, Deleted, isSnapshot, makeSnapshot, SyncSnapshot } from './sync';
-import { PlantItem, TrackedItem } from './types';
+import { PlantItem, PlantPhoto, TrackedItem } from './types';
 
 /** Marks a file as FarmHand plants, so we can tell it apart from any other JSON file. */
 const FORMAT = 'farmhand-plants';
@@ -75,20 +75,35 @@ export function transferFileName(plants: PlantItem[]): string {
   return `FarmHand - ${safe}.farmhand.json`;
 }
 
-/** Packs everything on this phone into a sync file the other phone merges with theirs (see sync.ts). */
+/** Which photos go in a sync file: none, those added recently, or all of them (e.g. for the first sync). */
+export type PhotoChoice = 'none' | 'recent' | 'all';
+export const RECENT_PHOTO_DAYS = 7;
+
+/** The photos a sync file carries for a plant. "Recent" goes by when a photo was added, not the date it shows. */
+export function photosToSend(photos: PlantPhoto[], choice: PhotoChoice, now: Date = new Date()): PlantPhoto[] {
+  if (choice === 'none') return [];
+  if (choice === 'all') return photos;
+  const since = new Date(now.getTime() - RECENT_PHOTO_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  return photos.filter((p) => (p.addedAt ?? p.takenAt) >= since);
+}
+
+/**
+ * Packs everything on this phone into a sync file the other phone merges with theirs (see sync.ts).
+ * Photos left out (e.g. older than a week) are not removed on the other phone – it just doesn't get them.
+ */
 export async function packSync(
   deviceId: string,
   items: TrackedItem[],
   deleted: Deleted,
-  includePhotos: boolean,
+  photoChoice: PhotoChoice,
 ): Promise<string> {
-  const snapshot = makeSnapshot(deviceId, items, deleted, includePhotos);
-  if (includePhotos) {
+  const snapshot = makeSnapshot(deviceId, items, deleted, photoChoice !== 'none');
+  if (photoChoice !== 'none') {
     snapshot.items = await Promise.all(
       snapshot.items.map(async (item) => {
         if (item.kind !== 'plant') return item;
         const photos = [];
-        for (const photo of item.photos) {
+        for (const photo of photosToSend(item.photos, photoChoice)) {
           try {
             photos.push({ ...photo, uri: await photoToDataUrl(photo.uri) });
           } catch (e) {
