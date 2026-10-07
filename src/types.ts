@@ -10,7 +10,7 @@ export interface Growth {
   daysToSeedling: number;
   /** Slowest expected germination; the seedling stage only starts on its own after this. */
   daysToSeedlingMax?: number;
-  /** Only used for the 'transplant' method: sowing → ready to transplant. */
+  /** Sowing → ready to transplant. For direct sowing, how long the plant counts as a seedling. */
   daysToTransplant: number;
   /** From seedling (direct) or from transplanting (transplant). */
   daysToHarvest: number;

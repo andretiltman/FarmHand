@@ -2,7 +2,7 @@ import { growthStatus } from './growth';
 import { animalSummary, plantSummary, taskSummary } from './stats';
 import { TrackedItem } from './types';
 
-export type SectionKey = 'overview' | 'sown' | 'seedlings' | 'plants' | 'animals' | 'maintenance';
+export type SectionKey = 'overview' | 'all' | 'sown' | 'seedlings' | 'plants' | 'animals' | 'maintenance';
 
 export interface Section {
   key: SectionKey;
@@ -38,6 +38,14 @@ export const sections: Section[] = [
     includes: needsAttention,
   },
   {
+    key: 'all',
+    label: 'All',
+    emoji: '📋',
+    emptyTitle: 'Nothing tracked yet',
+    emptyText: 'Tap “Add” below to start tracking a plant, your chickens or a maintenance job.',
+    includes: () => true,
+  },
+  {
     key: 'sown',
     label: 'Sown',
     emoji: '🌰',
@@ -50,7 +58,7 @@ export const sections: Section[] = [
     label: 'Seedlings',
     emoji: '🌱',
     emptyTitle: 'No seedlings',
-    emptyText: 'Sprouted seedlings show up here until they are transplanted.',
+    emptyText: 'Sprouted seedlings show up here until they are transplanted or big enough to stand on their own.',
     includes: (item, now) => plantStage(item, now) === 'seedling',
   },
   {

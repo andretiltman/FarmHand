@@ -1,7 +1,7 @@
 import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddItemModal } from './src/components/AddItemModal';
@@ -67,6 +67,30 @@ function HomeScreen() {
     >;
   }, [items]);
   const section = sections.find((s) => s.key === sectionKey)!;
+
+  // Swipe left/right on the list to move to the next/previous section.
+  const sectionIndexRef = useRef(0);
+  sectionIndexRef.current = sections.indexOf(section);
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 20 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+        onPanResponderRelease: (_, g) => {
+          if (Math.abs(g.dx) < 60 && Math.abs(g.vx) < 0.5) return;
+          const next = sectionIndexRef.current + (g.dx < 0 ? 1 : -1);
+          if (next >= 0 && next < sections.length) setSectionKey(sections[next].key);
+        },
+      }),
+    [],
+  );
+
+  // Keep the selected chip in view when the section changes (e.g. after a swipe).
+  const tabsRef = useRef<ScrollView>(null);
+  const tabX = useRef<Partial<Record<SectionKey, number>>>({});
+  useEffect(() => {
+    const x = tabX.current[sectionKey];
+    if (x !== undefined) tabsRef.current?.scrollTo({ x: Math.max(0, x - 40), animated: true });
+  }, [sectionKey]);
   const visible = bySection[sectionKey];
 
   const plantCount = items.filter((i) => i.kind === 'plant').length;
@@ -107,6 +131,7 @@ function HomeScreen() {
       </View>
 
       <ScrollView
+        ref={tabsRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.tabsScroll}
@@ -119,6 +144,7 @@ function HomeScreen() {
             <Pressable
               key={s.key}
               onPress={() => setSectionKey(s.key)}
+              onLayout={(e) => (tabX.current[s.key] = e.nativeEvent.layout.x)}
               style={({ pressed }) => [styles.tab, on && styles.tabOn, pressed && { opacity: 0.7 }]}
               accessibilityRole="tab"
               aria-selected={on}
@@ -145,6 +171,7 @@ function HomeScreen() {
         })}
       </ScrollView>
 
+      <View style={styles.content} {...swipe.panHandlers}>
       {!loaded ? (
         <ActivityIndicator style={styles.flex} color={colors.primary} />
       ) : (
@@ -180,6 +207,7 @@ function HomeScreen() {
           }
         />
       )}
+      </View>
 
       <View style={[styles.bottomBar, { paddingBottom: 12 + insets.bottom }]}>
         <Pressable
@@ -240,6 +268,7 @@ function HomeScreen() {
 const styles = StyleSheet.create({
   flex: { flexGrow: 1 },
   screen: { flex: 1, backgroundColor: colors.background },
+  content: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
   haButton: {
     width: 44,
