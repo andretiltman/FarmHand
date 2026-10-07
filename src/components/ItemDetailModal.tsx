@@ -14,11 +14,12 @@ interface Props {
   onClose: () => void;
   onWater: (id: string) => void;
   onLogEggs: (id: string, count: number) => void;
+  onFeed: (id: string) => void;
   onUndo: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
-export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onUndo, onDelete }: Props) {
+export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onUndo, onDelete }: Props) {
   const [eggCount, setEggCount] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -43,14 +44,20 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onUndo, onD
   } else {
     const s = animalSummary(item);
     stats = [
-      { label: 'Today', value: String(s.today) },
-      { label: 'Last 7 days', value: String(s.last7Days) },
-      { label: 'All time', value: String(s.total) },
+      { label: 'Last fed', value: s.lastFedLabel.replace(/^Fed /, '') },
+      { label: 'Eggs today', value: String(s.today) },
+      { label: 'Eggs / week', value: String(s.last7Days) },
+      { label: 'Eggs total', value: String(s.total) },
     ];
-    history = item.eggs.map((e, i) => ({
-      key: `${e.date}-${i}`,
-      text: `🥚  ${e.count} egg${e.count === 1 ? '' : 's'} · ${formatDateTime(e.date)}`,
-    }));
+    // Feedings and egg logs share one timeline, newest first.
+    history = [
+      ...item.eggs.map((e, i) => ({
+        key: `egg-${e.date}-${i}`,
+        date: e.date,
+        text: `🥚  ${e.count} egg${e.count === 1 ? '' : 's'} · ${formatDateTime(e.date)}`,
+      })),
+      ...item.feedings.map((d, i) => ({ key: `feed-${d}-${i}`, date: d, text: `🌾  Fed · ${formatDateTime(d)}` })),
+    ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }
 
   return (
@@ -93,19 +100,24 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onUndo, onD
           <Button label="💧  Watered now" color={colors.water} onPress={() => onWater(item.id)} />
         </View>
       ) : (
-        <View style={styles.eggRow}>
-          <Stepper label="Eggs collected" value={eggCount} onChange={setEggCount} max={200} suffix="eggs" />
-          <View style={styles.eggBtn}>
-            <Button
-              label="Log"
-              color={colors.animal}
-              onPress={() => {
-                onLogEggs(item.id, eggCount);
-                setEggCount(1);
-              }}
-            />
+        <>
+          <View style={styles.actionRow}>
+            <Button label="🌾  Fed now" color={colors.plant} onPress={() => onFeed(item.id)} />
           </View>
-        </View>
+          <View style={styles.eggRow}>
+            <Stepper label="Eggs collected" value={eggCount} onChange={setEggCount} max={200} suffix="eggs" />
+            <View style={styles.eggBtn}>
+              <Button
+                label="Log"
+                color={colors.animal}
+                onPress={() => {
+                  onLogEggs(item.id, eggCount);
+                  setEggCount(1);
+                }}
+              />
+            </View>
+          </View>
+        </>
       )}
 
       <View style={styles.historyHeader}>
@@ -118,7 +130,7 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onUndo, onD
       </View>
       <ScrollView style={styles.history}>
         {history.length === 0 ? (
-          <Text style={styles.empty}>{isPlant ? 'No waterings logged yet.' : 'No eggs logged yet.'}</Text>
+          <Text style={styles.empty}>{isPlant ? 'No waterings logged yet.' : 'No feedings or eggs logged yet.'}</Text>
         ) : (
           history.map((h) => (
             <Text key={h.key} style={styles.historyItem}>
@@ -132,7 +144,7 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onUndo, onD
 }
 
 const styles = StyleSheet.create({
-  stats: { flexDirection: 'row', gap: 10 },
+  stats: { flexDirection: 'row', gap: 8 },
   stat: {
     flex: 1,
     backgroundColor: colors.background,
@@ -142,7 +154,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: { fontSize: 16, fontWeight: '700', color: colors.text },
-  statLabel: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  statLabel: { fontSize: 12, color: colors.muted, marginTop: 2, textAlign: 'center' },
   actionRow: { flexDirection: 'row', marginTop: 16 },
   eggRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 12 },
   eggBtn: { flex: 1, flexDirection: 'row' },

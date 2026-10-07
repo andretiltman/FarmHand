@@ -27,6 +27,8 @@ export interface AnimalItem {
   headCount: number;
   /** Egg collections, newest first. */
   eggs: EggLog[];
+  /** ISO timestamps of each feeding, newest first. */
+  feedings: string[];
   createdAt: string;
 }
 
@@ -34,4 +36,4 @@ export type TrackedItem = PlantItem | AnimalItem;
 
 export type NewItem =
   | Omit<PlantItem, 'id' | 'waterings' | 'createdAt'>
-  | Omit<AnimalItem, 'id' | 'eggs' | 'createdAt'>;
+  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'createdAt'>;

@@ -20,7 +20,7 @@ export default function App() {
 
 function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { items, loaded, addItem, removeItem, waterPlant, logEggs, undoLast } = useItems();
+  const { items, loaded, addItem, removeItem, waterPlant, logEggs, feedAnimal, undoLast } = useItems();
   const [adding, setAdding] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = items.find((i) => i.id === selectedId) ?? null;
@@ -49,7 +49,9 @@ function HomeScreen() {
             <ItemCard
               item={item}
               onPress={() => setSelectedId(item.id)}
-              onQuickAction={() => (item.kind === 'plant' ? waterPlant(item.id) : logEggs(item.id, 1))}
+              onWater={() => waterPlant(item.id)}
+              onFeed={() => feedAnimal(item.id)}
+              onEgg={() => logEggs(item.id, 1)}
             />
           )}
           ListEmptyComponent={
@@ -79,6 +81,7 @@ function HomeScreen() {
         onClose={() => setSelectedId(null)}
         onWater={waterPlant}
         onLogEggs={logEggs}
+        onFeed={feedAnimal}
         onUndo={undoLast}
         onDelete={removeItem}
       />

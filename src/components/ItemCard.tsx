@@ -4,10 +4,21 @@ import { animalSummary, plantSummary, WaterStatus } from '../stats';
 import { colors, radius } from '../theme';
 import { TrackedItem } from '../types';
 
+interface QuickAction {
+  emoji: string;
+  label: string;
+  accessibilityLabel: string;
+  color: string;
+  soft: string;
+  onPress: () => void;
+}
+
 interface Props {
   item: TrackedItem;
   onPress: () => void;
-  onQuickAction: () => void;
+  onWater: () => void;
+  onFeed: () => void;
+  onEgg: () => void;
 }
 
 const statusColor: Record<WaterStatus, string> = {
@@ -17,21 +28,51 @@ const statusColor: Record<WaterStatus, string> = {
   overdue: colors.danger,
 };
 
-export function ItemCard({ item, onPress, onQuickAction }: Props) {
+export function ItemCard({ item, onPress, onWater, onFeed, onEgg }: Props) {
   const isPlant = item.kind === 'plant';
 
   let line1: string;
   let line2: string;
   let line2Color: string = colors.muted;
+  let actions: QuickAction[];
   if (item.kind === 'plant') {
     const s = plantSummary(item);
     line1 = `${s.lastWateredLabel} · every ${item.waterEveryDays} day${item.waterEveryDays === 1 ? '' : 's'}`;
     line2 = s.dueLabel;
     line2Color = statusColor[s.status];
+    actions = [
+      {
+        emoji: '💧',
+        label: 'Water',
+        accessibilityLabel: `Log watering for ${item.name}`,
+        color: colors.water,
+        soft: colors.waterSoft,
+        onPress: onWater,
+      },
+    ];
   } else {
     const s = animalSummary(item);
-    line1 = `${item.headCount} ${item.species.toLowerCase()}${item.headCount === 1 ? '' : 's'}`;
-    line2 = `🥚 ${s.today} today · ${s.last7Days} this week`;
+    line1 = `🥚 ${s.today} today, ${s.last7Days}/week`;
+    line2 = `🌾 ${s.lastFedLabel}`;
+    line2Color = s.fedToday ? colors.plant : colors.warning;
+    actions = [
+      {
+        emoji: '🌾',
+        label: 'Feed',
+        accessibilityLabel: `Log feeding for ${item.name}`,
+        color: colors.plant,
+        soft: colors.plantSoft,
+        onPress: onFeed,
+      },
+      {
+        emoji: '🥚',
+        label: '+1',
+        accessibilityLabel: `Log one egg for ${item.name}`,
+        color: colors.animal,
+        soft: colors.animalSoft,
+        onPress: onEgg,
+      },
+    ];
   }
 
   return (
@@ -55,22 +96,19 @@ export function ItemCard({ item, onPress, onQuickAction }: Props) {
           {line2}
         </Text>
       </View>
-      <Pressable
-        onPress={onQuickAction}
-        hitSlop={8}
-        style={({ pressed }) => [
-          styles.action,
-          { backgroundColor: isPlant ? colors.waterSoft : colors.animalSoft },
-          pressed && styles.pressed,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={isPlant ? `Log watering for ${item.name}` : `Log one egg for ${item.name}`}
-      >
-        <Text style={styles.actionEmoji}>{isPlant ? '💧' : '🥚'}</Text>
-        <Text style={[styles.actionLabel, { color: isPlant ? colors.water : colors.animal }]}>
-          {isPlant ? 'Water' : '+1'}
-        </Text>
-      </Pressable>
+      {actions.map((a) => (
+        <Pressable
+          key={a.label}
+          onPress={a.onPress}
+          hitSlop={4}
+          style={({ pressed }) => [styles.action, { backgroundColor: a.soft }, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel={a.accessibilityLabel}
+        >
+          <Text style={styles.actionEmoji}>{a.emoji}</Text>
+          <Text style={[styles.actionLabel, { color: a.color }]}>{a.label}</Text>
+        </Pressable>
+      ))}
     </Pressable>
   );
 }
@@ -100,8 +138,8 @@ const styles = StyleSheet.create({
   sub: { fontSize: 13, color: colors.muted, marginTop: 2 },
   status: { fontSize: 13, fontWeight: '600', marginTop: 2 },
   action: {
-    marginLeft: 10,
-    width: 60,
+    marginLeft: 8,
+    width: 56,
     paddingVertical: 8,
     borderRadius: radius.sm,
     alignItems: 'center',

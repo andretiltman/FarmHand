@@ -44,6 +44,9 @@ export interface AnimalSummary {
   today: number;
   last7Days: number;
   total: number;
+  lastFedLabel: string;
+  /** False when the animals haven't been fed yet today. */
+  fedToday: boolean;
 }
 
 export function animalSummary(animal: AnimalItem, now: Date = new Date()): AnimalSummary {
@@ -55,5 +58,12 @@ export function animalSummary(animal: AnimalItem, now: Date = new Date()): Anima
     if (isSameDay(log.date, now)) today += log.count;
     if (isWithinLastDays(log.date, 7, now)) last7Days += log.count;
   }
-  return { today, last7Days, total };
+  const lastFed = animal.feedings[0];
+  return {
+    today,
+    last7Days,
+    total,
+    lastFedLabel: lastFed ? `Fed ${relativeDay(lastFed, now)}` : 'Not fed yet',
+    fedToday: !!lastFed && isSameDay(lastFed, now),
+  };
 }
