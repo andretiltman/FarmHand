@@ -37,6 +37,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
   const [cropId, setCropId] = useState<string | null>(null);
   const [method, setMethod] = useState<SowMethod>('direct');
   const [sownDaysAgo, setSownDaysAgo] = useState(0);
+  const [seedsSown, setSeedsSown] = useState(1);
   const [species, setSpecies] = useState('Chicken');
   const [headCount, setHeadCount] = useState(1);
 
@@ -50,6 +51,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       setCropId(null);
       setMethod('direct');
       setSownDaysAgo(0);
+      setSeedsSown(1);
       setSpecies('Chicken');
       setHeadCount(1);
     }
@@ -73,6 +75,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
     daysToTransplant: crop.daysToTransplant,
     daysToHarvest: crop.daysToHarvest,
     sownAt: addDays(new Date(), -sownDaysAgo).toISOString(),
+    seedsSown,
   };
 
   const chooseKind = (k: ItemKind) => {
@@ -257,6 +260,15 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                   suffix="days ago"
                 />
               </View>
+
+              <Text style={styles.label}>How many seeds did you sow?</Text>
+              <Stepper
+                label="Seeds sown"
+                value={seedsSown}
+                onChange={setSeedsSown}
+                max={999}
+                suffix={seedsSown === 1 ? 'seed' : 'seeds'}
+              />
             </>
           )}
 
@@ -319,6 +331,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
               {isPlant
                 ? [
                     growth && (growth.method === 'direct' ? 'Sown directly' : 'Started in a seed tray'),
+                    growth && plural(seedsSown, 'seed'),
                     `water every ${plural(waterEveryDays, 'day')}`,
                   ]
                     .filter(Boolean)

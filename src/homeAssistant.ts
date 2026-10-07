@@ -1,5 +1,5 @@
 import { findCrop } from './crops';
-import { growthStatus } from './growth';
+import { growthStatus, transplantSuccess } from './growth';
 import { animalSummary, plantSummary } from './stats';
 import { TrackedItem } from './types';
 
@@ -72,6 +72,7 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
       if (item.growth) {
         const g = growthStatus(item.growth, now);
         const next = g.steps.find((s) => !s.done);
+        const success = transplantSuccess(item.growth);
         sensors.push({
           entityId,
           state: g.stage,
@@ -82,6 +83,9 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
             needs_action: g.needsAction,
             sow_method: item.growth.method,
             sown: item.growth.sownAt,
+            seeds_sown: item.growth.seedsSown ?? null,
+            seedlings_transplanted: success?.transplanted ?? null,
+            transplant_success_percent: success?.percent ?? null,
             next_milestone: next?.label ?? null,
             next_milestone_date: next ? next.date.toISOString() : null,
           },
