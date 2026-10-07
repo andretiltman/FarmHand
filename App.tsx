@@ -4,9 +4,11 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddItemModal } from './src/components/AddItemModal';
+import { HomeAssistantModal } from './src/components/HomeAssistantModal';
 import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
 import { colors, radius } from './src/theme';
+import { useHomeAssistant } from './src/useHomeAssistant';
 import { useItems } from './src/useItems';
 
 export default function App() {
@@ -35,7 +37,9 @@ function HomeScreen() {
     removePhoto,
     undoLast,
   } = useItems();
+  const homeAssistant = useHomeAssistant(items, loaded);
   const [adding, setAdding] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
@@ -45,10 +49,24 @@ function HomeScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>FarmHand</Text>
-        <Text style={styles.subtitle}>
-          {plantCount} plant{plantCount === 1 ? '' : 's'} · {animalCount} animal{animalCount === 1 ? '' : 's'}
-        </Text>
+        <View style={styles.flex}>
+          <Text style={styles.title}>FarmHand</Text>
+          <Text style={styles.subtitle}>
+            {plantCount} plant{plantCount === 1 ? '' : 's'} · {animalCount} animal{animalCount === 1 ? '' : 's'}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => setLinking(true)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.haButton, pressed && { opacity: 0.7 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Home Assistant settings"
+        >
+          <Text style={styles.haIcon}>🏠</Text>
+          {homeAssistant.config ? (
+            <View style={[styles.haDot, homeAssistant.status.error ? styles.haDotError : null]} />
+          ) : null}
+        </Pressable>
       </View>
 
       {!loaded ? (
@@ -89,6 +107,16 @@ function HomeScreen() {
         </Pressable>
       </View>
 
+      <HomeAssistantModal
+        visible={linking}
+        onClose={() => setLinking(false)}
+        items={items}
+        config={homeAssistant.config}
+        status={homeAssistant.status}
+        onConnect={homeAssistant.connect}
+        onDisconnect={homeAssistant.disconnect}
+        onSyncNow={homeAssistant.syncNow}
+      />
       <AddItemModal visible={adding} onClose={() => setAdding(false)} onSave={addItem} />
       <ItemDetailModal
         item={selected}
@@ -111,7 +139,30 @@ function HomeScreen() {
 const styles = StyleSheet.create({
   flex: { flexGrow: 1 },
   screen: { flex: 1, backgroundColor: colors.background },
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+  haButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  haIcon: { fontSize: 20 },
+  haDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.plant,
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  haDotError: { backgroundColor: colors.danger },
   title: { fontSize: 30, fontWeight: '800', color: colors.text },
   subtitle: { fontSize: 14, color: colors.muted, marginTop: 2 },
   list: { paddingHorizontal: 16, paddingBottom: 24 },
