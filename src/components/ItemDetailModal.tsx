@@ -8,6 +8,7 @@ import { animalSummary, plantSummary } from '../stats';
 import { colors, radius } from '../theme';
 import { TrackedItem } from '../types';
 import { Button } from './Button';
+import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
@@ -26,10 +27,12 @@ interface Props {
 export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onAdvance, onUndo, onDelete }: Props) {
   const [eggCount, setEggCount] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     setEggCount(1);
     setConfirmDelete(false);
+    setShowGuide(false);
   }, [item?.id]);
 
   if (!item) return null;
@@ -41,6 +44,7 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onA
   let icon = isPlant ? '🪴' : '🐔';
   const growth = item.kind === 'plant' ? item.growth : undefined;
   const status = growth && growthStatus(growth);
+  const crop = growth && findCrop(growth.cropId);
   if (item.kind === 'plant') {
     const s = plantSummary(item);
     stats = [
@@ -65,7 +69,6 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onA
       undoable: true,
     }));
     if (growth) {
-      const crop = findCrop(growth.cropId);
       icon = crop?.emoji ?? icon;
       subtitle = `${crop?.name ?? 'Crop'} · ${growth.method === 'direct' ? 'sown directly' : 'seed tray → transplant'}`;
       const events: [string | undefined, string, boolean][] = [
@@ -150,7 +153,9 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onA
             </Text>
             {status.nextAction === 'sprouted' && (
               <Text style={styles.growthNote}>
-                The seedling stage starts automatically on the estimated date. Sprouted early? Mark it below.
+                {growth?.daysToSeedlingMax
+                  ? 'Germination can be slow and uneven – tap below when you see the first leaves.'
+                  : 'The seedling stage starts automatically on the estimated date. Sprouted early? Mark it below.'}
               </Text>
             )}
             {status.nextAction === 'transplanted' && (
@@ -165,6 +170,19 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onA
                   onPress={() => onAdvance(item.id, status.nextAction!)}
                 />
               </View>
+            )}
+            {crop && (
+              <>
+                <Text
+                  style={styles.guideToggle}
+                  onPress={() => setShowGuide((v) => !v)}
+                  accessibilityRole="button"
+                  aria-expanded={showGuide}
+                >
+                  📖 Growing guide {showGuide ? '▾' : '▸'}
+                </Text>
+                {showGuide && <CropGuide crop={crop} method={growth!.method} />}
+              </>
             )}
           </View>
         )}
@@ -239,6 +257,7 @@ const styles = StyleSheet.create({
   body: { flexShrink: 1 },
   growth: { marginBottom: 20 },
   growthHeadline: { fontSize: 17, fontWeight: '700', marginTop: 16, textAlign: 'center' },
+  guideToggle: { fontSize: 15, fontWeight: '600', color: colors.water, marginTop: 16, marginBottom: 8 },
   growthNote: { fontSize: 13, color: colors.muted, marginTop: 4, textAlign: 'center' },
   stats: { flexDirection: 'row', gap: 8 },
   stat: {

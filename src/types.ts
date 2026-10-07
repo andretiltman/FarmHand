@@ -8,6 +8,8 @@ export interface Growth {
   cropId: string;
   method: SowMethod;
   daysToSeedling: number;
+  /** Slowest expected germination; the seedling stage only starts on its own after this. */
+  daysToSeedlingMax?: number;
   /** Only used for the 'transplant' method: sowing → ready to transplant. */
   daysToTransplant: number;
   /** From seedling (direct) or from transplanting (transplant). */

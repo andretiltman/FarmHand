@@ -1,4 +1,4 @@
-import { addDays, daysBetween, plural, relativeDay } from './dates';
+import { addDays, daysBetween, formatDays, relativeDay } from './dates';
 import { Growth } from './types';
 
 export type Stage = 'seed' | 'seedling' | 'growing' | 'ready' | 'harvested';
@@ -30,6 +30,10 @@ function later(a: Date, b: Date): Date {
   return a.getTime() >= b.getTime() ? a : b;
 }
 
+function clamp(d: Date, min: Date, max: Date): Date {
+  return d < min ? min : d > max ? max : d;
+}
+
 function countdown(target: Date, now: Date): number {
   return daysBetween(now, target);
 }
@@ -37,9 +41,11 @@ function countdown(target: Date, now: Date): number {
 export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
   const sown = new Date(g.sownAt);
   const seedlingEst = addDays(sown, g.daysToSeedling);
-  const seedlingAt = g.sproutedAt ? new Date(g.sproutedAt) : seedlingEst;
-  // The seedling stage starts on its own once the estimated germination time has passed.
-  const isSeedling = !!g.sproutedAt || countdown(seedlingEst, now) <= 0;
+  // Slow, variable germinators (e.g. strawberries: 7 days to 8 weeks) get a window before we assume they sprouted.
+  const seedlingLatest = addDays(sown, Math.max(g.daysToSeedling, g.daysToSeedlingMax ?? 0));
+  const seedlingAt = g.sproutedAt ? new Date(g.sproutedAt) : clamp(now, seedlingEst, seedlingLatest);
+  // The seedling stage starts on its own once the (latest) expected germination time has passed.
+  const isSeedling = !!g.sproutedAt || countdown(seedlingLatest, now) <= 0;
 
   const isTray = g.method === 'transplant';
   const transplantReady = addDays(sown, g.daysToTransplant);
@@ -88,7 +94,7 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
     const n = countdown(seedlingEst, now);
     return {
       stage: 'seed',
-      headline: `Seedling in ${plural(n, 'day')}`,
+      headline: n > 0 ? `Seedling in ${g.daysToSeedlingMax ? '~' : ''}${formatDays(n)}` : 'Should sprout any day',
       emoji: '🌰',
       needsAction: false,
       nextAction: 'sprouted',
@@ -99,7 +105,7 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
     const n = countdown(transplantReady, now);
     return {
       stage: 'seedling',
-      headline: n > 0 ? `Transplant in ${plural(n, 'day')}` : 'Ready to transplant',
+      headline: n > 0 ? `Transplant in ${formatDays(n)}` : 'Ready to transplant',
       emoji: '🌱',
       needsAction: n <= 0,
       nextAction: 'transplanted',
@@ -110,7 +116,7 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
   if (n > 0) {
     return {
       stage: 'growing',
-      headline: `Harvest in ${plural(n, 'day')}`,
+      headline: `Harvest in ${formatDays(n)}`,
       emoji: '🌿',
       needsAction: false,
       nextAction: 'harvested',
@@ -126,4 +132,3 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
     steps,
   };
 }
-

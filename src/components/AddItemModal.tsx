@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CROPS, Crop, findCrop } from '../crops';
-import { addDays, plural } from '../dates';
+import { addDays, approxDays, plural } from '../dates';
 import { growthStatus } from '../growth';
+import { sowingAdvice } from '../seasons';
 import { colors, radius } from '../theme';
 import { Growth, ItemKind, NewItem, SowMethod } from '../types';
 import { Button } from './Button';
+import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
@@ -67,6 +69,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
     cropId: crop.id,
     method,
     daysToSeedling: crop.daysToSeedling,
+    daysToSeedlingMax: crop.guide.germinationDays?.[1],
     daysToTransplant: crop.daysToTransplant,
     daysToHarvest: crop.daysToHarvest,
     sownAt: addDays(new Date(), -sownDaysAgo).toISOString(),
@@ -101,7 +104,11 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
   const titles: Record<Step, string> = {
     kind: 'What would you like to track?',
     crop: 'What are you planting?',
-    details: crop ? `Planting ${crop.name.toLowerCase()}` : isPlant ? 'Tell us about your plant' : 'Tell us about your animals',
+    details: crop
+      ? `Planting ${crop.name.toLowerCase()}`
+      : isPlant
+        ? 'Tell us about your plant'
+        : 'Tell us about your animals',
     review: 'Looks good?',
   };
 
@@ -159,12 +166,23 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
         <ScrollView style={styles.shrink}>
           <View style={styles.cropGrid}>
             {CROPS.map((c) => (
-              <CropTile key={c.id} emoji={c.emoji} label={c.name} selected={cropId === c.id} onPress={() => chooseCrop(c)} />
+              <CropTile
+                key={c.id}
+                emoji={c.emoji}
+                label={c.name}
+                inSeason={sowingAdvice(c.guide.sow).inSeason}
+                selected={cropId === c.id}
+                onPress={() => chooseCrop(c)}
+              />
             ))}
           </View>
           <Pressable
             onPress={() => chooseCrop(null)}
-            style={({ pressed }) => [styles.otherTile, cropId === OTHER && styles.tileSelected, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.otherTile,
+              cropId === OTHER && styles.tileSelected,
+              pressed && styles.pressed,
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Other plant, watering only"
           >
@@ -194,17 +212,20 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
 
           {crop && (
             <>
+              <Text style={styles.label}>Growing guide</Text>
+              <CropGuide crop={crop} method={method} showAdvice />
+
               <Text style={styles.label}>How will you start it?</Text>
               <MethodOption
                 title="Sow directly in the ground"
-                description={`Seedling in ~${crop.daysToSeedling} days, harvest ~${crop.daysToHarvest} days after that`}
+                description={`Seedling in ${approxDays(crop.daysToSeedling)}, harvest ${approxDays(crop.daysToHarvest)} after that`}
                 recommended={crop.recommended === 'direct'}
                 selected={method === 'direct'}
                 onPress={() => setMethod('direct')}
               />
               <MethodOption
                 title="Start in a seed tray, transplant later"
-                description={`Ready to transplant in ~${crop.daysToTransplant} days, harvest ~${crop.daysToHarvest} days after transplanting`}
+                description={`Ready to transplant in ${approxDays(crop.daysToTransplant)}, harvest ${approxDays(crop.daysToHarvest)} after transplanting`}
                 recommended={crop.recommended === 'transplant'}
                 selected={method === 'transplant'}
                 onPress={() => setMethod('transplant')}
@@ -213,8 +234,18 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
 
               <Text style={styles.label}>When did you sow it?</Text>
               <View style={styles.chips}>
-                <Chip label="Today" selected={sownDaysAgo === 0} color={colors.plant} onPress={() => setSownDaysAgo(0)} />
-                <Chip label="Yesterday" selected={sownDaysAgo === 1} color={colors.plant} onPress={() => setSownDaysAgo(1)} />
+                <Chip
+                  label="Today"
+                  selected={sownDaysAgo === 0}
+                  color={colors.plant}
+                  onPress={() => setSownDaysAgo(0)}
+                />
+                <Chip
+                  label="Yesterday"
+                  selected={sownDaysAgo === 1}
+                  color={colors.plant}
+                  onPress={() => setSownDaysAgo(1)}
+                />
               </View>
               <View style={styles.spaced}>
                 <Stepper
@@ -282,7 +313,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       {step === 'review' && (
         <ScrollView style={styles.shrink}>
           <View style={[styles.review, { borderColor: accent }]}>
-            <Text style={styles.reviewEmoji}>{isPlant ? crop?.emoji ?? '🪴' : '🐔'}</Text>
+            <Text style={styles.reviewEmoji}>{isPlant ? (crop?.emoji ?? '🪴') : '🐔'}</Text>
             <Text style={styles.reviewName}>{trimmedName}</Text>
             <Text style={styles.reviewDetail}>
               {isPlant
@@ -346,17 +377,20 @@ function KindOption(props: {
   );
 }
 
-function CropTile(props: { emoji: string; label: string; selected: boolean; onPress: () => void }) {
+function CropTile(props: { emoji: string; label: string; inSeason: boolean; selected: boolean; onPress: () => void }) {
   return (
     <Pressable
       onPress={props.onPress}
       style={({ pressed }) => [styles.cropTile, props.selected && styles.tileSelected, pressed && styles.pressed]}
       accessibilityRole="button"
-      accessibilityLabel={props.label}
+      accessibilityLabel={`${props.label}, ${props.inSeason ? 'in season' : 'off season'}`}
     >
       <Text style={styles.cropEmoji}>{props.emoji}</Text>
       <Text style={styles.cropLabel} numberOfLines={1}>
         {props.label}
+      </Text>
+      <Text style={[styles.cropSeason, props.inSeason && styles.cropInSeason]}>
+        {props.inSeason ? '✓ In season' : 'Off season'}
       </Text>
     </Pressable>
   );
@@ -433,6 +467,8 @@ const styles = StyleSheet.create({
   tileSelected: { borderColor: colors.plant, borderWidth: 2, backgroundColor: colors.plantSoft },
   cropEmoji: { fontSize: 28 },
   cropLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 4 },
+  cropSeason: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  cropInSeason: { color: colors.plant, fontWeight: '600' },
   otherTile: {
     flexDirection: 'row',
     alignItems: 'center',

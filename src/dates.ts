@@ -15,12 +15,28 @@ export function addDays(d: Date, days: number): Date {
   return r;
 }
 
-export function formatShortDate(d: Date): string {
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+/** "5 Sep", with the year added when it isn't this year. */
+export function formatShortDate(d: Date, now: Date = new Date()): string {
+  const year = d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year });
 }
 
 export function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+/** "12 days", or "~5 months" / "~2 years" for long stretches. */
+export function formatDays(days: number): string {
+  if (days <= 90) return plural(days, 'day');
+  const months = days / 30.4;
+  if (months < 23.5) return `~${Math.round(months)} months`;
+  return `~${Math.round((days / 365) * 2) / 2} years`;
+}
+
+/** formatDays prefixed with "~" (once). */
+export function approxDays(days: number): string {
+  const text = formatDays(days);
+  return text.startsWith('~') ? text : `~${text}`;
 }
 
 export function isSameDay(iso: string, ref: Date = new Date()): boolean {
