@@ -20,8 +20,21 @@ export default function App() {
 
 function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { items, loaded, addItem, removeItem, waterPlant, logEggs, feedAnimal, advanceStage, undoLast } =
-    useItems();
+  const {
+    items,
+    loaded,
+    addItem,
+    removeItem,
+    waterPlant,
+    logEggs,
+    feedAnimal,
+    advanceStage,
+    updateGrowth,
+    addPhoto,
+    setPhotoDate,
+    removePhoto,
+    undoLast,
+  } = useItems();
   const [adding, setAdding] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = items.find((i) => i.id === selectedId) ?? null;
@@ -72,7 +85,7 @@ function HomeScreen() {
           accessibilityRole="button"
           accessibilityLabel="Add a plant or animal"
         >
-          <Text style={styles.addText}>＋  Add</Text>
+          <Text style={styles.addText}>＋ Add</Text>
         </Pressable>
       </View>
 
@@ -84,6 +97,10 @@ function HomeScreen() {
         onLogEggs={logEggs}
         onFeed={feedAnimal}
         onAdvance={advanceStage}
+        onUpdateGrowth={updateGrowth}
+        onAddPhoto={addPhoto}
+        onSetPhotoDate={setPhotoDate}
+        onRemovePhoto={removePhoto}
         onUndo={undoLast}
         onDelete={removeItem}
       />

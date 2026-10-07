@@ -1,12 +1,12 @@
 import { Fragment } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatShortDate } from '../dates';
-import { JourneyStep } from '../growth';
+import { JourneyStep, MilestoneKey } from '../growth';
 import { colors } from '../theme';
 
 /** Seed → Seedling → (Transplant) → Harvest, with dates (estimates prefixed with ~). */
-export function Journey({ steps }: { steps: JourneyStep[] }) {
+export function Journey({ steps, onStepPress }: { steps: JourneyStep[]; onStepPress?: (key: MilestoneKey) => void }) {
   const current = steps.findIndex((s) => !s.done);
   return (
     <View style={styles.row} accessibilityRole="summary">
@@ -15,8 +15,12 @@ export function Journey({ steps }: { steps: JourneyStep[] }) {
         return (
           <Fragment key={s.key}>
             {i > 0 && <View style={[styles.line, steps[i].done && styles.lineDone]} />}
-            <View
-              style={styles.step}
+            <Pressable
+              style={({ pressed }) => [styles.step, pressed && styles.pressed]}
+              onPress={onStepPress && (() => onStepPress(s.key))}
+              disabled={!onStepPress}
+              accessibilityRole={onStepPress ? 'button' : undefined}
+              accessibilityHint={onStepPress ? 'Change date' : undefined}
               accessibilityLabel={`${s.label}: ${s.done ? 'done' : isCurrent ? 'next' : 'later'}, ${
                 s.estimated ? 'around ' : ''
               }${formatShortDate(s.date)}`}
@@ -31,7 +35,7 @@ export function Journey({ steps }: { steps: JourneyStep[] }) {
                 {s.estimated ? '~' : ''}
                 {formatShortDate(s.date)}
               </Text>
-            </View>
+            </Pressable>
           </Fragment>
         );
       })}
@@ -43,8 +47,9 @@ const DOT = 40;
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start' },
-  step: { alignItems: 'center', width: 70 },
-  line: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.border, marginTop: DOT / 2 - 1 },
+  step: { alignItems: 'center', width: 70, borderRadius: 8, paddingVertical: 2 },
+  pressed: { backgroundColor: colors.background },
+  line: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.border, marginTop: DOT / 2 + 1 },
   lineDone: { backgroundColor: colors.plant },
   dot: {
     width: DOT,

@@ -20,6 +20,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FarmHand uses your photos so you can add pictures of your plants as they grow.",
+          "cameraPermission": "FarmHand uses the camera so you can photograph your plants as they grow."
+        }
+      ]
+    ]
   }
 }

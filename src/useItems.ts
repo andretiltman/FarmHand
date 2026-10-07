@@ -2,13 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { StageAction } from './growth';
-import { Growth, NewItem, PlantItem, TrackedItem } from './types';
+import { deletePhoto, savePhoto } from './photoStorage';
+import { Growth, NewItem, PlantItem, PlantPhoto, TrackedItem } from './types';
 
 const STORAGE_KEY = 'farmhand.items.v1';
 
 /** Fills in fields added after an item was first saved. */
 function migrate(item: TrackedItem): TrackedItem {
-  return item.kind === 'animal' ? { ...item, feedings: item.feedings ?? [] } : item;
+  return item.kind === 'animal' ? { ...item, feedings: item.feedings ?? [] } : { ...item, photos: item.photos ?? [] };
 }
 
 const STAGE_FIELD: Record<StageAction, 'sproutedAt' | 'transplantedAt' | 'harvestedAt'> = {
@@ -56,23 +57,66 @@ export function useItems() {
       skipFirstSave.current = false;
       return;
     }
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items)).catch((e) =>
-      console.warn('Failed to save items', e),
-    );
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items)).catch((e) => console.warn('Failed to save items', e));
   }, [items, loaded]);
 
   const addItem = useCallback((input: NewItem) => {
     const base = { id: makeId(), createdAt: new Date().toISOString() };
     const item: TrackedItem =
       input.kind === 'plant'
-        ? { ...input, ...base, waterings: [] }
+        ? { ...input, ...base, waterings: [], photos: [] }
         : { ...input, ...base, eggs: [], feedings: [] };
     setItems((prev) => [item, ...prev]);
   }, []);
 
   const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    setItems((prev) => {
+      const item = prev.find((i) => i.id === id);
+      if (item?.kind === 'plant') item.photos.forEach((p) => deletePhoto(p.uri));
+      return prev.filter((i) => i.id !== id);
+    });
   }, []);
+
+  const updatePlant = useCallback((id: string, update: (plant: PlantItem) => PlantItem) => {
+    setItems((prev) => prev.map((i) => (i.id === id && i.kind === 'plant' ? update(i) : i)));
+  }, []);
+
+  /** Replaces a plant's growth record, e.g. after the user moves a milestone date. */
+  const updateGrowth = useCallback(
+    (id: string, growth: Growth) => updatePlant(id, (p) => ({ ...p, growth })),
+    [updatePlant],
+  );
+
+  const addPhoto = useCallback(
+    async (id: string, pickedUri: string) => {
+      const photoId = makeId();
+      const uri = await savePhoto(pickedUri, photoId);
+      const photo: PlantPhoto = { id: photoId, uri, takenAt: new Date().toISOString() };
+      updatePlant(id, (p) => ({ ...p, photos: [photo, ...p.photos] }));
+    },
+    [updatePlant],
+  );
+
+  const setPhotoDate = useCallback(
+    (id: string, photoId: string, takenAt: string) =>
+      updatePlant(id, (p) => ({
+        ...p,
+        photos: p.photos
+          .map((ph) => (ph.id === photoId ? { ...ph, takenAt } : ph))
+          .sort((a, b) => (a.takenAt < b.takenAt ? 1 : a.takenAt > b.takenAt ? -1 : 0)),
+      })),
+    [updatePlant],
+  );
+
+  const removePhoto = useCallback(
+    (id: string, photoId: string) =>
+      updatePlant(id, (p) => {
+        const photo = p.photos.find((ph) => ph.id === photoId);
+        if (photo) deletePhoto(photo.uri);
+        return { ...p, photos: p.photos.filter((ph) => ph.id !== photoId) };
+      }),
+    [updatePlant],
+  );
 
   const waterPlant = useCallback((id: string) => {
     const now = new Date().toISOString();
@@ -84,9 +128,7 @@ export function useItems() {
   const logEggs = useCallback((id: string, count: number) => {
     if (count <= 0) return;
     const entry = { date: new Date().toISOString(), count };
-    setItems((prev) =>
-      prev.map((i) => (i.id === id && i.kind === 'animal' ? { ...i, eggs: [entry, ...i.eggs] } : i)),
-    );
+    setItems((prev) => prev.map((i) => (i.id === id && i.kind === 'animal' ? { ...i, eggs: [entry, ...i.eggs] } : i)));
   }, []);
 
   const feedAnimal = useCallback((id: string) => {
@@ -122,5 +164,19 @@ export function useItems() {
     );
   }, []);
 
-  return { items, loaded, addItem, removeItem, waterPlant, logEggs, feedAnimal, advanceStage, undoLast };
+  return {
+    items,
+    loaded,
+    addItem,
+    removeItem,
+    waterPlant,
+    logEggs,
+    feedAnimal,
+    advanceStage,
+    updateGrowth,
+    addPhoto,
+    setPhotoDate,
+    removePhoto,
+    undoLast,
+  };
 }

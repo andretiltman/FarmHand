@@ -1,11 +1,14 @@
 import { addDays, daysBetween, formatDays, relativeDay } from './dates';
+import { Crop } from './crops';
 import { Growth } from './types';
 
 export type Stage = 'seed' | 'seedling' | 'growing' | 'ready' | 'harvested';
 export type StageAction = 'sprouted' | 'transplanted' | 'harvested';
 
+export type MilestoneKey = 'sown' | 'seedling' | 'transplant' | 'harvest';
+
 export interface JourneyStep {
-  key: 'sown' | 'seedling' | 'transplant' | 'harvest';
+  key: MilestoneKey;
   label: string;
   emoji: string;
   date: Date;
@@ -24,6 +27,8 @@ export interface GrowthStatus {
   /** The next milestone the user can confirm, if any. */
   nextAction: StageAction | null;
   steps: JourneyStep[];
+  /** The date the harvest countdown is measured from. */
+  harvestFrom: Date;
 }
 
 function later(a: Date, b: Date): Date {
@@ -88,6 +93,7 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
       needsAction: false,
       nextAction: null,
       steps,
+      harvestFrom,
     };
   }
   if (!isSeedling) {
@@ -99,6 +105,7 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
       needsAction: false,
       nextAction: 'sprouted',
       steps,
+      harvestFrom,
     };
   }
   if (isTray && !transplantedAt) {
@@ -110,6 +117,7 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
       needsAction: n <= 0,
       nextAction: 'transplanted',
       steps,
+      harvestFrom,
     };
   }
   const n = countdown(harvestEst, now);
@@ -121,6 +129,7 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
       needsAction: false,
       nextAction: 'harvested',
       steps,
+      harvestFrom,
     };
   }
   return {
@@ -130,5 +139,86 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
     needsAction: true,
     nextAction: 'harvested',
     steps,
+    harvestFrom,
   };
+}
+
+function atNoon(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
+}
+
+/**
+ * Which dates a milestone can be moved to. Dates must stay in order, sowing can't be in the future,
+ * and a milestone whose previous step hasn't happened yet can only get a new (future) estimate.
+ */
+export function milestoneBounds(steps: JourneyStep[], key: MilestoneKey, now: Date = new Date()) {
+  const i = steps.findIndex((s) => s.key === key);
+  const prev = steps[i - 1];
+  const next = steps[i + 1];
+  const tomorrow = addDays(atNoon(now), 1);
+  let min: Date | undefined;
+  let max: Date | undefined;
+  if (prev) min = prev.done ? prev.date : later(tomorrow, addDays(prev.date, 1));
+  if (next?.done && !next.estimated) max = next.date;
+  if (key === 'sown' && (!max || max > now)) max = now;
+  return { min, max };
+}
+
+/**
+ * Moves a milestone to `date`. Today or earlier records that it happened then; a future date
+ * changes this plant's expected timing (e.g. for a faster or slower variety).
+ */
+export function setMilestoneDate(g: Growth, key: MilestoneKey, date: Date, now: Date = new Date()): Growth {
+  const at = atNoon(date).toISOString();
+  const happened = daysBetween(date, now) >= 0;
+  const sown = new Date(g.sownAt);
+  switch (key) {
+    case 'sown':
+      return { ...g, sownAt: at };
+    case 'seedling':
+      return happened
+        ? { ...g, sproutedAt: at }
+        : { ...g, sproutedAt: undefined, daysToSeedling: daysBetween(sown, date), daysToSeedlingMax: undefined };
+    case 'transplant':
+      return happened
+        ? { ...g, transplantedAt: at }
+        : { ...g, transplantedAt: undefined, daysToTransplant: daysBetween(sown, date) };
+    case 'harvest':
+      return happened
+        ? { ...g, harvestedAt: at }
+        : { ...g, harvestedAt: undefined, daysToHarvest: daysBetween(growthStatus(g, now).harvestFrom, date) };
+  }
+}
+
+/** True when a milestone has a recorded date or a timing that differs from the crop's usual one. */
+export function isCustomized(g: Growth, key: MilestoneKey, crop: Crop | undefined): boolean {
+  switch (key) {
+    case 'sown':
+      return false;
+    case 'seedling':
+      return !!g.sproutedAt || (!!crop && g.daysToSeedling !== crop.daysToSeedling);
+    case 'transplant':
+      return !!g.transplantedAt || (!!crop && g.daysToTransplant !== crop.daysToTransplant);
+    case 'harvest':
+      return !!g.harvestedAt || (!!crop && g.daysToHarvest !== crop.daysToHarvest);
+  }
+}
+
+/** Clears a recorded date and goes back to the crop's usual timing for that milestone. */
+export function resetMilestone(g: Growth, key: MilestoneKey, crop: Crop | undefined): Growth {
+  switch (key) {
+    case 'sown':
+      return g;
+    case 'seedling':
+      return {
+        ...g,
+        sproutedAt: undefined,
+        daysToSeedling: crop?.daysToSeedling ?? g.daysToSeedling,
+        daysToSeedlingMax: crop ? crop.guide.germinationDays?.[1] : g.daysToSeedlingMax,
+      };
+    case 'transplant':
+      return { ...g, transplantedAt: undefined, daysToTransplant: crop?.daysToTransplant ?? g.daysToTransplant };
+    case 'harvest':
+      return { ...g, harvestedAt: undefined, daysToHarvest: crop?.daysToHarvest ?? g.daysToHarvest };
+  }
 }

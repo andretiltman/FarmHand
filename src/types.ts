@@ -21,6 +21,13 @@ export interface Growth {
   harvestedAt?: string;
 }
 
+export interface PlantPhoto {
+  id: string;
+  /** Permanent file URI on device (data: URL on web). */
+  uri: string;
+  takenAt: string;
+}
+
 export interface PlantItem {
   id: string;
   kind: 'plant';
@@ -31,6 +38,8 @@ export interface PlantItem {
   waterings: string[];
   /** Absent for plants tracked for watering only (e.g. houseplants). */
   growth?: Growth;
+  /** Progress photos, newest first. */
+  photos: PlantPhoto[];
   createdAt: string;
 }
 
@@ -58,5 +67,5 @@ export interface AnimalItem {
 export type TrackedItem = PlantItem | AnimalItem;
 
 export type NewItem =
-  | Omit<PlantItem, 'id' | 'waterings' | 'createdAt'>
+  | Omit<PlantItem, 'id' | 'waterings' | 'photos' | 'createdAt'>
   | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'createdAt'>;

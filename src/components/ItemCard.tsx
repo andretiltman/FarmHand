@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { findCrop } from '../crops';
 import { growthStatus } from '../growth';
@@ -96,7 +96,11 @@ export function ItemCard({ item, onPress, onWater, onFeed, onEgg }: Props) {
       accessibilityLabel={`${item.name}, ${line1}, ${line2}`}
     >
       <View style={[styles.icon, { backgroundColor: isPlant ? colors.plantSoft : colors.animalSoft }]}>
-        <Text style={styles.iconText}>{icon}</Text>
+        {item.kind === 'plant' && item.photos[0] ? (
+          <Image source={{ uri: item.photos[0].uri }} style={styles.photo} accessibilityIgnoresInvertColors />
+        ) : (
+          <Text style={styles.iconText}>{icon}</Text>
+        )}
       </View>
       <View style={styles.body}>
         <Text style={styles.name} numberOfLines={1}>
@@ -146,6 +150,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   iconText: { fontSize: 24 },
+  photo: { width: 48, height: 48, borderRadius: 24 },
   body: { flex: 1, minWidth: 0 },
   name: { fontSize: 17, fontWeight: '600', color: colors.text },
   sub: { fontSize: 13, color: colors.muted, marginTop: 2 },

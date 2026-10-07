@@ -3,13 +3,16 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { findCrop } from '../crops';
 import { formatDateTime } from '../dates';
-import { growthStatus, StageAction } from '../growth';
+import { growthStatus, MilestoneKey, StageAction } from '../growth';
 import { animalSummary, plantSummary } from '../stats';
 import { colors, radius } from '../theme';
-import { TrackedItem } from '../types';
+import { Growth, TrackedItem } from '../types';
 import { Button } from './Button';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
+import { MilestoneEditor } from './MilestoneEditor';
+import { PhotoLog } from './PhotoLog';
+import { PhotoViewer } from './PhotoViewer';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
 
@@ -20,19 +23,29 @@ interface Props {
   onLogEggs: (id: string, count: number) => void;
   onFeed: (id: string) => void;
   onAdvance: (id: string, action: StageAction) => void;
+  onUpdateGrowth: (id: string, growth: Growth) => void;
+  onAddPhoto: (id: string, pickedUri: string) => Promise<void>;
+  onSetPhotoDate: (id: string, photoId: string, takenAt: string) => void;
+  onRemovePhoto: (id: string, photoId: string) => void;
   onUndo: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
-export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onAdvance, onUndo, onDelete }: Props) {
+/** What the popup is showing: the overview, a stage's date picker, or one photo. */
+type View_ = { kind: 'main' } | { kind: 'milestone'; key: MilestoneKey } | { kind: 'photo'; id: string };
+
+export function ItemDetailModal(props: Props) {
+  const { item, onClose, onWater, onLogEggs, onFeed, onAdvance, onUndo, onDelete } = props;
   const [eggCount, setEggCount] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [view, setView] = useState<View_>({ kind: 'main' });
 
   useEffect(() => {
     setEggCount(1);
     setConfirmDelete(false);
     setShowGuide(false);
+    setView({ kind: 'main' });
   }, [item?.id]);
 
   if (!item) return null;
@@ -108,6 +121,48 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onA
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }
 
+  const back = () => setView({ kind: 'main' });
+  const photo = view.kind === 'photo' && item.kind === 'plant' ? item.photos.find((p) => p.id === view.id) : undefined;
+
+  if (view.kind === 'milestone' && growth) {
+    return (
+      <Sheet visible onClose={onClose} subtitle={subtitle} title={`${icon}  ${item.name}`}>
+        <ScrollView style={styles.body}>
+          <MilestoneEditor
+            growth={growth}
+            crop={crop}
+            stepKey={view.key}
+            onCancel={back}
+            onSave={(g) => {
+              props.onUpdateGrowth(item.id, g);
+              back();
+            }}
+          />
+        </ScrollView>
+      </Sheet>
+    );
+  }
+
+  if (photo) {
+    return (
+      <Sheet visible onClose={onClose} subtitle={subtitle} title={`${icon}  ${item.name}`}>
+        <ScrollView style={styles.body}>
+          <PhotoViewer
+            key={photo.id}
+            photo={photo}
+            sownAt={growth?.sownAt}
+            onClose={back}
+            onChangeDate={(takenAt) => props.onSetPhotoDate(item.id, photo.id, takenAt)}
+            onDelete={() => {
+              props.onRemovePhoto(item.id, photo.id);
+              back();
+            }}
+          />
+        </ScrollView>
+      </Sheet>
+    );
+  }
+
   return (
     <Sheet
       visible
@@ -139,7 +194,8 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onA
       <ScrollView style={styles.body}>
         {status && (
           <View style={styles.growth}>
-            <Journey steps={status.steps} />
+            <Journey steps={status.steps} onStepPress={(key) => setView({ kind: 'milestone', key })} />
+            <Text style={styles.journeyHint}>Tap a stage to change its date</Text>
             <Text
               style={[
                 styles.growthHeadline,
@@ -184,6 +240,18 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onA
                 {showGuide && <CropGuide crop={crop} method={growth!.method} />}
               </>
             )}
+          </View>
+        )}
+
+        {item.kind === 'plant' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Photos</Text>
+            <PhotoLog
+              photos={item.photos}
+              sownAt={growth?.sownAt}
+              onAdd={(uri) => props.onAddPhoto(item.id, uri)}
+              onOpen={(p) => setView({ kind: 'photo', id: p.id })}
+            />
           </View>
         )}
 
@@ -256,6 +324,9 @@ const STAGE_BUTTON: Record<StageAction, { label: string }> = {
 const styles = StyleSheet.create({
   body: { flexShrink: 1 },
   growth: { marginBottom: 20 },
+  journeyHint: { fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: 4 },
+  section: { marginBottom: 20 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 8 },
   growthHeadline: { fontSize: 17, fontWeight: '700', marginTop: 16, textAlign: 'center' },
   guideToggle: { fontSize: 15, fontWeight: '600', color: colors.water, marginTop: 16, marginBottom: 8 },
   growthNote: { fontSize: 13, color: colors.muted, marginTop: 4, textAlign: 'center' },
