@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ReactNode, useEffect, useState } from 'react';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius } from '../theme';
@@ -16,11 +16,12 @@ interface Props {
 /** Bottom-sheet style popup used for the add flow and item details. */
 export function Sheet({ visible, title, subtitle, onClose, children, footer }: Props) {
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useAndroidKeyboardHeight();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
+        <View style={[styles.sheet, { paddingBottom: 16 + Math.max(insets.bottom, keyboardHeight) }]}>
           <View style={styles.handle} />
           <View style={styles.header}>
             <View style={styles.flex}>
@@ -37,6 +38,24 @@ export function Sheet({ visible, title, subtitle, onClose, children, footer }: P
       </KeyboardAvoidingView>
     </Modal>
   );
+}
+
+/**
+ * Android draws edge-to-edge, so the window doesn't shrink when the keyboard opens and it would cover
+ * the sheet's text boxes. Returns the keyboard's height there so the sheet can sit above it.
+ */
+function useAndroidKeyboardHeight(): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
 }
 
 const styles = StyleSheet.create({
