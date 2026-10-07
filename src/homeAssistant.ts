@@ -67,6 +67,7 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
         water_due: water.dueLabel,
         days_until_water_due: water.daysUntilDue,
         water_every_days: item.waterEveryDays,
+        tags: item.tags.join(', '),
         last_watered: item.waterings[0] ?? null,
       };
       if (item.growth) {

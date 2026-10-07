@@ -44,6 +44,8 @@ export interface PlantItem {
   growth?: Growth;
   /** Progress photos, newest first. */
   photos: PlantPhoto[];
+  /** e.g. "GMO-free", "Bush", "Runner". */
+  tags: string[];
   createdAt: string;
 }
 
