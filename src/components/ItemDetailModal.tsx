@@ -31,6 +31,7 @@ interface Props {
   onUndo: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onSetTags: (id: string, tags: string[]) => void;
+  onSetWaterEvery: (id: string, days: number) => void;
   onDelete: (id: string) => void;
 }
 
@@ -369,6 +370,18 @@ export function ItemDetailModal(props: Props) {
                 🪴 {success.transplanted} of {success.sown} seeds made it to transplanting ({success.percent}%)
               </Text>
             )}
+          </View>
+        )}
+
+        {item.kind === 'plant' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Water every</Text>
+            <Stepper
+              label="Watering interval"
+              value={item.waterEveryDays}
+              onChange={(days) => props.onSetWaterEvery(item.id, days)}
+              suffix={item.waterEveryDays === 1 ? 'day' : 'days'}
+            />
           </View>
         )}
 

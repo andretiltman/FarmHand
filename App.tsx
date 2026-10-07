@@ -31,6 +31,7 @@ function HomeScreen() {
     removeItem,
     renameItem,
     setTags,
+    setWaterEvery,
     waterPlant,
     logEggs,
     feedAnimal,
@@ -136,6 +137,7 @@ function HomeScreen() {
         onUndo={undoLast}
         onRename={renameItem}
         onSetTags={setTags}
+        onSetWaterEvery={setWaterEvery}
         onDelete={removeItem}
       />
     </View>

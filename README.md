@@ -24,7 +24,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
 - **Photo log** – take or choose photos of each plant as it grows. Photos are labelled by age (*Day 23*), can be re-dated (handy for older photos from your library) or deleted, and the newest one becomes the plant's icon on the list.
 - **Tags** – mark plants as **GMO-free**, **Bush** or **Runner** (a plant can't be both bush and runner), or type your own like *Heirloom*. Tags show on the plant's card, can be changed in its details, and are sent to Home Assistant as a `tags` attribute.
 - **Seasons follow your hemisphere** – worked out from the phone's time zone, so October is spring in South Africa and autumn in Europe.
-- **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, rename it (✏️ **Rename**), or delete it.
+- **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, change how often a plant needs watering, rename it (✏️ **Rename**), or delete it.
 - **Full screen on Android** – the system navigation bar is hidden while FarmHand is open; swipe up from the bottom edge to bring it back briefly.
 - **Home Assistant sensors** – tap 🏠 at the top, enter your Home Assistant address and a long-lived access token, and every plant and animal appears in Home Assistant as a sensor (see below).
 - Data is saved on the device (AsyncStorage), no account needed.

@@ -92,6 +92,11 @@ export function useItems() {
     [updatePlant],
   );
 
+  const setWaterEvery = useCallback(
+    (id: string, waterEveryDays: number) => updatePlant(id, (p) => ({ ...p, waterEveryDays })),
+    [updatePlant],
+  );
+
   /** Replaces a plant's growth record, e.g. after the user moves a milestone date. */
   const updateGrowth = useCallback(
     (id: string, growth: Growth) => updatePlant(id, (p) => ({ ...p, growth })),
@@ -182,6 +187,7 @@ export function useItems() {
     removeItem,
     renameItem,
     setTags,
+    setWaterEvery,
     waterPlant,
     logEggs,
     feedAnimal,
