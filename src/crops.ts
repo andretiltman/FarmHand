@@ -53,6 +53,8 @@ export const CROPS: Crop[] = [
     guide: { sow: ['spring', 'summer'], depthMm: 25, spacingCm: { plant: 45, row: 75 }, germinationC: [18, 30] } },
   { id: 'pumpkin', name: 'Pumpkin', emoji: '🎃', recommended: 'direct', tip: 'Sow directly once the soil is warm, or start in pots to get ahead.', daysToSeedling: 8, daysToTransplant: 21, daysToHarvest: 90, waterEveryDays: 3,
     guide: { sow: ['spring', 'summer'], depthMm: 25, spacingCm: { plant: 100, row: 200 }, germinationC: [20, 35] } },
+  { id: 'squash', name: 'Squash / Butternut', emoji: '🎃', recommended: 'direct', tip: 'Sow directly once the soil is warm, or start in pots to get ahead.', daysToSeedling: 8, daysToTransplant: 21, daysToHarvest: 95, waterEveryDays: 3,
+    guide: { sow: ['spring', 'summer'], depthMm: 25, spacingCm: { plant: 90, row: 180 }, germinationC: [20, 35], note: 'Pick winter squash once the skin is hard and the stem has dried, then cure it in the sun for 1–2 weeks so it stores for months.' } },
   { id: 'zucchini', name: 'Zucchini', emoji: '🥒', recommended: 'direct', tip: 'Sow directly once the soil is warm, or start in pots to get ahead.', daysToSeedling: 7, daysToTransplant: 21, daysToHarvest: 45, waterEveryDays: 2,
     guide: { sow: ['spring', 'summer'], depthMm: 25, spacingCm: { plant: 60, row: 100 }, germinationC: [20, 35] } },
   { id: 'cucumber', name: 'Cucumber', emoji: '🥒', recommended: 'direct', tip: 'Sow directly once the soil is warm, or start in pots to get ahead.', daysToSeedling: 7, daysToTransplant: 21, daysToHarvest: 50, waterEveryDays: 2,
