@@ -238,6 +238,7 @@ function HomeScreen() {
         items={items}
         onImport={importPlants}
         onRemove={removeItems}
+        onUpdateGrowth={updateGrowth}
         deletedRef={deletedRef}
         onSync={applySnapshot}
       />

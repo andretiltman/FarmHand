@@ -1,6 +1,6 @@
 import { photoToDataUrl } from './photoStorage';
 import { checkSnapshot, Deleted, isSnapshot, makeSnapshot, SyncSnapshot } from './sync';
-import { PlantItem, PlantPhoto, TrackedItem } from './types';
+import { Growth, PlantItem, PlantPhoto, TrackedItem } from './types';
 
 /** Marks a file as FarmHand plants, so we can tell it apart from any other JSON file. */
 const FORMAT = 'farmhand-plants';
@@ -14,6 +14,29 @@ export interface TransferFile {
   version: number;
   sentAt: string;
   plants: TransferPlant[];
+}
+
+/** How many plants an entry holds right now (seedlings that made it once transplanted), if known. */
+export function plantCount(plant: PlantItem): number | undefined {
+  const g = plant.growth;
+  if (!g?.seedsSown) return undefined;
+  return g.transplantedAt && g.transplantedCount !== undefined ? g.transplantedCount : g.seedsSown;
+}
+
+/**
+ * Splits `give` plants off an entry: the growth for the copy that's sent and for what stays here.
+ * Plants lost before transplanting stay with the original, so the sent copy starts with all of its plants.
+ */
+export function splitGrowth(g: Growth, give: number): { sent: Growth; kept: Growth } {
+  const counted = !!g.transplantedAt && g.transplantedCount !== undefined;
+  return {
+    sent: { ...g, seedsSown: give, transplantedCount: counted ? give : undefined },
+    kept: {
+      ...g,
+      seedsSown: (g.seedsSown ?? give) - give,
+      transplantedCount: counted ? g.transplantedCount! - give : undefined,
+    },
+  };
 }
 
 /** Packs plants (with their full history, and optionally their photos) into a file's text. */
