@@ -9,6 +9,20 @@ export function daysBetween(a: Date, b: Date): number {
   return Math.round((startOfDay(b) - startOfDay(a)) / DAY_MS);
 }
 
+export function addDays(d: Date, days: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + days);
+  return r;
+}
+
+export function formatShortDate(d: Date): string {
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+export function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
 export function isSameDay(iso: string, ref: Date = new Date()): boolean {
   return daysBetween(new Date(iso), ref) === 0;
 }

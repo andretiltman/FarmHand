@@ -1,5 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { findCrop } from '../crops';
+import { growthStatus } from '../growth';
 import { animalSummary, plantSummary, WaterStatus } from '../stats';
 import { colors, radius } from '../theme';
 import { TrackedItem } from '../types';
@@ -33,12 +35,23 @@ export function ItemCard({ item, onPress, onWater, onFeed, onEgg }: Props) {
 
   let line1: string;
   let line2: string;
+  /** Set when line 1 is a highlighted status rather than plain detail text. */
+  let line1Color: string | null = null;
   let line2Color: string = colors.muted;
+  let icon = isPlant ? '🪴' : '🐔';
   let actions: QuickAction[];
   if (item.kind === 'plant') {
     const s = plantSummary(item);
-    line1 = `${s.lastWateredLabel} · every ${item.waterEveryDays} day${item.waterEveryDays === 1 ? '' : 's'}`;
-    line2 = s.dueLabel;
+    if (item.growth) {
+      const g = growthStatus(item.growth);
+      icon = findCrop(item.growth.cropId)?.emoji ?? icon;
+      line1 = `${g.emoji} ${g.headline}`;
+      line1Color = g.stage === 'harvested' ? colors.muted : g.needsAction ? colors.warning : colors.plant;
+      line2 = `💧 ${s.dueLabel}`;
+    } else {
+      line1 = `${s.lastWateredLabel} · every ${item.waterEveryDays} day${item.waterEveryDays === 1 ? '' : 's'}`;
+      line2 = s.dueLabel;
+    }
     line2Color = statusColor[s.status];
     actions = [
       {
@@ -83,13 +96,13 @@ export function ItemCard({ item, onPress, onWater, onFeed, onEgg }: Props) {
       accessibilityLabel={`${item.name}, ${line1}, ${line2}`}
     >
       <View style={[styles.icon, { backgroundColor: isPlant ? colors.plantSoft : colors.animalSoft }]}>
-        <Text style={styles.iconText}>{isPlant ? '🪴' : '🐔'}</Text>
+        <Text style={styles.iconText}>{icon}</Text>
       </View>
       <View style={styles.body}>
         <Text style={styles.name} numberOfLines={1}>
           {item.name}
         </Text>
-        <Text style={styles.sub} numberOfLines={1}>
+        <Text style={line1Color ? [styles.status, { color: line1Color }] : styles.sub} numberOfLines={1}>
           {line1}
         </Text>
         <Text style={[styles.status, { color: line2Color }]} numberOfLines={1}>

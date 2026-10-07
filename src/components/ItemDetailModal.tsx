@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { findCrop } from '../crops';
 import { formatDateTime } from '../dates';
+import { growthStatus, StageAction } from '../growth';
 import { animalSummary, plantSummary } from '../stats';
 import { colors, radius } from '../theme';
 import { TrackedItem } from '../types';
 import { Button } from './Button';
+import { Journey } from './Journey';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
 
@@ -15,11 +18,12 @@ interface Props {
   onWater: (id: string) => void;
   onLogEggs: (id: string, count: number) => void;
   onFeed: (id: string) => void;
+  onAdvance: (id: string, action: StageAction) => void;
   onUndo: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
-export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onUndo, onDelete }: Props) {
+export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onAdvance, onUndo, onDelete }: Props) {
   const [eggCount, setEggCount] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -32,16 +36,51 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onU
   const isPlant = item.kind === 'plant';
 
   let stats: { label: string; value: string }[];
-  let history: { key: string; text: string }[];
+  let history: { key: string; date: string; text: string; undoable: boolean }[];
+  let subtitle = isPlant ? 'Plant' : '';
+  let icon = isPlant ? '🪴' : '🐔';
+  const growth = item.kind === 'plant' ? item.growth : undefined;
+  const status = growth && growthStatus(growth);
   if (item.kind === 'plant') {
     const s = plantSummary(item);
     stats = [
       { label: 'Schedule', value: `Every ${item.waterEveryDays}d` },
-      { label: 'Status', value: s.dueLabel },
+      {
+        label: 'Water due',
+        value:
+          s.daysUntilDue === null
+            ? 'Now'
+            : s.daysUntilDue === 0
+              ? 'Today'
+              : s.daysUntilDue > 0
+                ? `In ${s.daysUntilDue}d`
+                : `${-s.daysUntilDue}d late`,
+      },
       { label: 'Times watered', value: String(item.waterings.length) },
     ];
-    history = item.waterings.map((d, i) => ({ key: `${d}-${i}`, text: `💧  ${formatDateTime(d)}` }));
+    history = item.waterings.map((d, i) => ({
+      key: `water-${d}-${i}`,
+      date: d,
+      text: `💧  Watered · ${formatDateTime(d)}`,
+      undoable: true,
+    }));
+    if (growth) {
+      const crop = findCrop(growth.cropId);
+      icon = crop?.emoji ?? icon;
+      subtitle = `${crop?.name ?? 'Crop'} · ${growth.method === 'direct' ? 'sown directly' : 'seed tray → transplant'}`;
+      const events: [string | undefined, string, boolean][] = [
+        [growth.sownAt, growth.method === 'direct' ? '🌰  Sown in the ground' : '🌰  Sown in seed tray', false],
+        [growth.sproutedAt, '🌱  Marked as seedling', true],
+        [growth.transplantedAt, '🪴  Transplanted', true],
+        [growth.harvestedAt, '🧺  Harvested', true],
+      ];
+      for (const [date, label, undoable] of events) {
+        if (date) history.push({ key: label, date, text: `${label} · ${formatDateTime(date)}`, undoable });
+      }
+      history.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    }
   } else {
+    subtitle = `${item.headCount} × ${item.species}`;
     const s = animalSummary(item);
     stats = [
       { label: 'Last fed', value: s.lastFedLabel.replace(/^Fed /, '') },
@@ -55,8 +94,14 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onU
         key: `egg-${e.date}-${i}`,
         date: e.date,
         text: `🥚  ${e.count} egg${e.count === 1 ? '' : 's'} · ${formatDateTime(e.date)}`,
+        undoable: true,
       })),
-      ...item.feedings.map((d, i) => ({ key: `feed-${d}-${i}`, date: d, text: `🌾  Fed · ${formatDateTime(d)}` })),
+      ...item.feedings.map((d, i) => ({
+        key: `feed-${d}-${i}`,
+        date: d,
+        text: `🌾  Fed · ${formatDateTime(d)}`,
+        undoable: true,
+      })),
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }
 
@@ -64,8 +109,8 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onU
     <Sheet
       visible
       onClose={onClose}
-      subtitle={isPlant ? 'Plant' : `${item.headCount} × ${item.species}`}
-      title={`${isPlant ? '🪴' : '🐔'}  ${item.name}`}
+      subtitle={subtitle}
+      title={`${icon}  ${item.name}`}
       footer={
         confirmDelete ? (
           <>
@@ -80,70 +125,121 @@ export function ItemDetailModal({ item, onClose, onWater, onLogEggs, onFeed, onU
             />
           </>
         ) : (
-          <Button label={`Delete ${isPlant ? 'plant' : 'animals'}`} variant="danger" onPress={() => setConfirmDelete(true)} />
+          <Button
+            label={`Delete ${isPlant ? 'plant' : 'animals'}`}
+            variant="danger"
+            onPress={() => setConfirmDelete(true)}
+          />
         )
       }
     >
-      <View style={styles.stats}>
-        {stats.map((s) => (
-          <View key={s.label} style={styles.stat}>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-              {s.value}
+      <ScrollView style={styles.body}>
+        {status && (
+          <View style={styles.growth}>
+            <Journey steps={status.steps} />
+            <Text
+              style={[
+                styles.growthHeadline,
+                {
+                  color:
+                    status.stage === 'harvested' ? colors.muted : status.needsAction ? colors.warning : colors.plant,
+                },
+              ]}
+            >
+              {status.emoji} {status.headline}
             </Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
+            {status.nextAction === 'sprouted' && (
+              <Text style={styles.growthNote}>
+                The seedling stage starts automatically on the estimated date. Sprouted early? Mark it below.
+              </Text>
+            )}
+            {status.nextAction === 'transplanted' && (
+              <Text style={styles.growthNote}>The harvest countdown starts once you mark it as transplanted.</Text>
+            )}
+            {status.nextAction && (
+              <View style={styles.actionRow}>
+                <Button
+                  {...STAGE_BUTTON[status.nextAction]}
+                  variant={status.nextAction === 'sprouted' ? 'secondary' : 'primary'}
+                  color={status.needsAction ? colors.warning : colors.plant}
+                  onPress={() => onAdvance(item.id, status.nextAction!)}
+                />
+              </View>
+            )}
           </View>
-        ))}
-      </View>
+        )}
 
-      {isPlant ? (
-        <View style={styles.actionRow}>
-          <Button label="💧  Watered now" color={colors.water} onPress={() => onWater(item.id)} />
-        </View>
-      ) : (
-        <>
-          <View style={styles.actionRow}>
-            <Button label="🌾  Fed now" color={colors.plant} onPress={() => onFeed(item.id)} />
-          </View>
-          <View style={styles.eggRow}>
-            <Stepper label="Eggs collected" value={eggCount} onChange={setEggCount} max={200} suffix="eggs" />
-            <View style={styles.eggBtn}>
-              <Button
-                label="Log"
-                color={colors.animal}
-                onPress={() => {
-                  onLogEggs(item.id, eggCount);
-                  setEggCount(1);
-                }}
-              />
+        <View style={styles.stats}>
+          {stats.map((s) => (
+            <View key={s.label} style={styles.stat}>
+              <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+                {s.value}
+              </Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
             </View>
-          </View>
-        </>
-      )}
+          ))}
+        </View>
 
-      <View style={styles.historyHeader}>
-        <Text style={styles.historyTitle}>History</Text>
-        {history.length > 0 && (
-          <Text style={styles.undo} onPress={() => onUndo(item.id)} accessibilityRole="button">
-            Undo last
-          </Text>
-        )}
-      </View>
-      <ScrollView style={styles.history}>
-        {history.length === 0 ? (
-          <Text style={styles.empty}>{isPlant ? 'No waterings logged yet.' : 'No feedings or eggs logged yet.'}</Text>
+        {isPlant ? (
+          <View style={styles.actionRow}>
+            <Button label="💧  Watered now" color={colors.water} onPress={() => onWater(item.id)} />
+          </View>
         ) : (
-          history.map((h) => (
-            <Text key={h.key} style={styles.historyItem}>
-              {h.text}
-            </Text>
-          ))
+          <>
+            <View style={styles.actionRow}>
+              <Button label="🌾  Fed now" color={colors.plant} onPress={() => onFeed(item.id)} />
+            </View>
+            <View style={styles.eggRow}>
+              <Stepper label="Eggs collected" value={eggCount} onChange={setEggCount} max={200} suffix="eggs" />
+              <View style={styles.eggBtn}>
+                <Button
+                  label="Log"
+                  color={colors.animal}
+                  onPress={() => {
+                    onLogEggs(item.id, eggCount);
+                    setEggCount(1);
+                  }}
+                />
+              </View>
+            </View>
+          </>
         )}
+
+        <View style={styles.historyHeader}>
+          <Text style={styles.historyTitle}>History</Text>
+          {history.some((h) => h.undoable) && (
+            <Text style={styles.undo} onPress={() => onUndo(item.id)} accessibilityRole="button">
+              Undo last
+            </Text>
+          )}
+        </View>
+        <View>
+          {history.length === 0 ? (
+            <Text style={styles.empty}>{isPlant ? 'No waterings logged yet.' : 'No feedings or eggs logged yet.'}</Text>
+          ) : (
+            history.map((h) => (
+              <Text key={h.key} style={styles.historyItem}>
+                {h.text}
+              </Text>
+            ))
+          )}
+        </View>
       </ScrollView>
     </Sheet>
   );
 }
 
+const STAGE_BUTTON: Record<StageAction, { label: string }> = {
+  sprouted: { label: '🌱  It has sprouted' },
+  transplanted: { label: '🪴  Mark as transplanted' },
+  harvested: { label: '🧺  Mark as harvested' },
+};
+
 const styles = StyleSheet.create({
+  body: { flexShrink: 1 },
+  growth: { marginBottom: 20 },
+  growthHeadline: { fontSize: 17, fontWeight: '700', marginTop: 16, textAlign: 'center' },
+  growthNote: { fontSize: 13, color: colors.muted, marginTop: 4, textAlign: 'center' },
   stats: { flexDirection: 'row', gap: 8 },
   stat: {
     flex: 1,
@@ -161,7 +257,6 @@ const styles = StyleSheet.create({
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, marginBottom: 8 },
   historyTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
   undo: { fontSize: 14, color: colors.water, fontWeight: '600' },
-  history: { maxHeight: 220 },
   historyItem: {
     fontSize: 14,
     color: colors.text,

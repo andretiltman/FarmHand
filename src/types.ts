@@ -1,5 +1,24 @@
 export type ItemKind = 'plant' | 'animal';
 
+/** Sow straight into the ground, or start in a seed tray and transplant later. */
+export type SowMethod = 'direct' | 'transplant';
+
+/** A crop's journey from seed to harvest. Timings are copied from the crop catalog when added. */
+export interface Growth {
+  cropId: string;
+  method: SowMethod;
+  daysToSeedling: number;
+  /** Only used for the 'transplant' method: sowing → ready to transplant. */
+  daysToTransplant: number;
+  /** From seedling (direct) or from transplanting (transplant). */
+  daysToHarvest: number;
+  sownAt: string;
+  /** Set when the user marks it sprouted early; otherwise the seedling stage starts on the estimated date. */
+  sproutedAt?: string;
+  transplantedAt?: string;
+  harvestedAt?: string;
+}
+
 export interface PlantItem {
   id: string;
   kind: 'plant';
@@ -8,6 +27,8 @@ export interface PlantItem {
   waterEveryDays: number;
   /** ISO timestamps of each watering, newest first. */
   waterings: string[];
+  /** Absent for plants tracked for watering only (e.g. houseplants). */
+  growth?: Growth;
   createdAt: string;
 }
 

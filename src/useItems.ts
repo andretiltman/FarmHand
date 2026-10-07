@@ -1,13 +1,34 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { NewItem, TrackedItem } from './types';
+import { StageAction } from './growth';
+import { Growth, NewItem, PlantItem, TrackedItem } from './types';
 
 const STORAGE_KEY = 'farmhand.items.v1';
 
 /** Fills in fields added after an item was first saved. */
 function migrate(item: TrackedItem): TrackedItem {
   return item.kind === 'animal' ? { ...item, feedings: item.feedings ?? [] } : item;
+}
+
+const STAGE_FIELD: Record<StageAction, 'sproutedAt' | 'transplantedAt' | 'harvestedAt'> = {
+  sprouted: 'sproutedAt',
+  transplanted: 'transplantedAt',
+  harvested: 'harvestedAt',
+};
+
+/** Removes the newest watering or stage change from a plant. */
+function undoPlant(plant: PlantItem): PlantItem {
+  let newest: { date: string; field: keyof Growth | 'water' } | null = plant.waterings[0]
+    ? { date: plant.waterings[0], field: 'water' }
+    : null;
+  for (const field of Object.values(STAGE_FIELD)) {
+    const date = plant.growth?.[field];
+    if (date && (!newest || date > newest.date)) newest = { date, field };
+  }
+  if (!newest) return plant;
+  if (newest.field === 'water') return { ...plant, waterings: plant.waterings.slice(1) };
+  return { ...plant, growth: { ...plant.growth!, [newest.field]: undefined } };
 }
 
 function makeId(): string {
@@ -75,12 +96,24 @@ export function useItems() {
     );
   }, []);
 
+  /** Confirms a growth milestone (sprouted / transplanted / harvested) as of now. */
+  const advanceStage = useCallback((id: string, action: StageAction) => {
+    const now = new Date().toISOString();
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === id && i.kind === 'plant' && i.growth
+          ? { ...i, growth: { ...i.growth, [STAGE_FIELD[action]]: now } }
+          : i,
+      ),
+    );
+  }, []);
+
   /** Removes the most recent history entry (undo a mis-tap). */
   const undoLast = useCallback((id: string) => {
     setItems((prev) =>
       prev.map((i) => {
         if (i.id !== id) return i;
-        if (i.kind === 'plant') return { ...i, waterings: i.waterings.slice(1) };
+        if (i.kind === 'plant') return undoPlant(i);
         const lastEgg = i.eggs[0]?.date ?? '';
         const lastFeed = i.feedings[0] ?? '';
         if (!lastEgg && !lastFeed) return i;
@@ -89,5 +122,5 @@ export function useItems() {
     );
   }, []);
 
-  return { items, loaded, addItem, removeItem, waterPlant, logEggs, feedAnimal, undoLast };
+  return { items, loaded, addItem, removeItem, waterPlant, logEggs, feedAnimal, advanceStage, undoLast };
 }
