@@ -121,6 +121,18 @@ export function growthStatus(g: Growth, now: Date = new Date()): GrowthStatus {
     };
   }
   const n = countdown(harvestEst, now);
+  // Direct-sown crops are still young seedlings until they'd be big enough to transplant.
+  if (!isTray && n > 0 && countdown(transplantReady, now) > 0) {
+    return {
+      stage: 'seedling',
+      headline: `Harvest in ${formatDays(n)}`,
+      emoji: '🌱',
+      needsAction: false,
+      nextAction: 'harvested',
+      steps,
+      harvestFrom,
+    };
+  }
   if (n > 0) {
     return {
       stage: 'growing',

@@ -10,9 +10,11 @@ import {
   packPlants,
   packSync,
   PhotoChoice,
+  plantCount,
   photosToSend,
   Received,
   RECENT_PHOTO_DAYS,
+  splitGrowth,
   syncFileName,
   TransferFile,
   transferFileName,
@@ -20,9 +22,10 @@ import {
   unpackReceived,
 } from '../transfer';
 import { pickTransferFile, shareTransferFile } from '../transferFile';
-import { PlantItem, TrackedItem } from '../types';
+import { Growth, PlantItem, TrackedItem } from '../types';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
+import { Stepper } from './Stepper';
 
 interface Props {
   visible: boolean;
@@ -30,6 +33,7 @@ interface Props {
   items: TrackedItem[];
   onImport: (plants: TransferPlant[]) => Promise<void>;
   onRemove: (ids: string[]) => void;
+  onUpdateGrowth: (id: string, growth: Growth) => void;
   deletedRef: MutableRefObject<Deleted>;
   onSync: (snapshot: SyncSnapshot) => Promise<MergeResult>;
 }
@@ -37,7 +41,8 @@ interface Props {
 type Step =
   | { kind: 'menu' }
   | { kind: 'send' }
-  | { kind: 'sent'; ids: string[] }
+  /** `kept` holds what stays here for plants only partly given away. */
+  | { kind: 'sent'; ids: string[]; kept: Record<string, Growth> }
   | { kind: 'sync' }
   | { kind: 'receive'; received: Received | null }
   | { kind: 'received'; count: number }
@@ -47,10 +52,21 @@ type Step =
  * Send plants to another phone as a file (via WhatsApp, email, Bluetooth, …), add plants someone sent you,
  * or sync everything with another phone by swapping sync files.
  */
-export function TransferModal({ visible, onClose, items, onImport, onRemove, deletedRef, onSync }: Props) {
+export function TransferModal({
+  visible,
+  onClose,
+  items,
+  onImport,
+  onRemove,
+  onUpdateGrowth,
+  deletedRef,
+  onSync,
+}: Props) {
   const plants = items.filter((i): i is PlantItem => i.kind === 'plant');
   const [step, setStep] = useState<Step>({ kind: 'menu' });
   const [selected, setSelected] = useState<string[]>([]);
+  /** How many to give away, for entries holding several plants (all of them when not set). */
+  const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [includePhotos, setIncludePhotos] = useState(true);
   const [syncPhotos, setSyncPhotos] = useState<PhotoChoice>('recent');
   const [busy, setBusy] = useState(false);
@@ -60,6 +76,7 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
     if (visible) {
       setStep({ kind: 'menu' });
       setSelected([]);
+      setAmounts({});
       setIncludePhotos(true);
       setSyncPhotos('recent');
       setError(null);
@@ -88,11 +105,24 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
   const syncPhotoCount = (choice: PhotoChoice) =>
     plants.reduce((n, p) => n + photosToSend(p.photos, choice).length, 0);
 
+  const amountOf = (p: PlantItem) => {
+    const total = plantCount(p);
+    return total === undefined ? undefined : Math.min(amounts[p.id] ?? total, total);
+  };
+
   const send = () =>
     run(async () => {
-      const text = await packPlants(chosen, includePhotos);
-      await shareTransferFile(transferFileName(chosen), text);
-      go({ kind: 'sent', ids: chosen.map((p) => p.id) });
+      const kept: Record<string, Growth> = {};
+      const toSend = chosen.map((p) => {
+        const give = amountOf(p);
+        if (!p.growth || give === undefined || give >= plantCount(p)!) return p;
+        const split = splitGrowth(p.growth, give);
+        kept[p.id] = split.kept;
+        return { ...p, growth: split.sent };
+      });
+      const text = await packPlants(toSend, includePhotos);
+      await shareTransferFile(transferFileName(toSend), text);
+      go({ kind: 'sent', ids: chosen.map((p) => p.id), kept });
     });
 
   const sendSync = () =>
@@ -189,9 +219,31 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
             >
               <Text style={styles.selectAllText}>{allSelected ? 'Select none' : 'Select all'}</Text>
             </Pressable>
-            {plants.map((p) => (
-              <PlantRow key={p.id} plant={p} checked={selected.includes(p.id)} onPress={() => toggle(p.id)} />
-            ))}
+            {plants.map((p) => {
+              const checked = selected.includes(p.id);
+              const total = plantCount(p);
+              return (
+                <View key={p.id}>
+                  <PlantRow plant={p} checked={checked} onPress={() => toggle(p.id)} />
+                  {checked && total !== undefined && total > 1 ? (
+                    <View style={styles.amount}>
+                      <Text style={styles.amountLabel}>How many to give?</Text>
+                      <Stepper
+                        label={`${p.name} to give`}
+                        value={amountOf(p)!}
+                        onChange={(n) => setAmounts((prev) => ({ ...prev, [p.id]: n }))}
+                        min={1}
+                        max={total}
+                        suffix={`of ${total}`}
+                      />
+                      <Text style={styles.hint}>
+                        {amountOf(p) === total ? 'All of them' : `${total - amountOf(p)!} stay with you`}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
             {photoSwitch}
             {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
           </ScrollView>
@@ -208,32 +260,53 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove, del
       );
       break;
 
-    case 'sent':
-      title = 'Sent?';
+    case 'sent': {
+      const { ids, kept } = step;
+      const whole = ids.filter((id) => !kept[id]);
+      const split = ids.filter((id) => kept[id]);
+      const one = ids.length === 1;
       body = (
         <>
           <Text style={styles.help}>
-            Once the other person has added {step.ids.length === 1 ? 'it' : 'them'} on their phone (📥 Receive), you can
-            remove {step.ids.length === 1 ? 'the plant' : `the ${step.ids.length} plants`} from yours to finish moving{' '}
-            {step.ids.length === 1 ? 'it' : 'them'} – or keep a copy if you're both looking after{' '}
-            {step.ids.length === 1 ? 'it' : 'them'}.
+            Once the other person has added {one ? 'it' : 'them'} on their phone (📥 Receive),{' '}
+            {split.length === 0
+              ? `you can remove ${one ? 'the plant' : `the ${ids.length} plants`} from yours to finish moving ${one ? 'it' : 'them'}`
+              : 'you can take what you gave away off your phone'}{' '}
+            – or keep a copy if you're both looking after {one ? 'it' : 'them'}.
           </Text>
+          {split.map((id) => {
+            const plant = plants.find((p) => p.id === id);
+            return plant ? (
+              <Text key={id} style={[styles.hint, styles.spaced]}>
+                {plant.name}: {plantCount({ ...plant, growth: kept[id] })} will stay with you.
+              </Text>
+            ) : null;
+          })}
+          {whole.length > 0 && split.length > 0 ? (
+            <Text style={[styles.hint, styles.spaced]}>
+              {whole.length === 1 ? '1 plant was' : `${whole.length} plants were`} given away completely and will be
+              removed.
+            </Text>
+          ) : null}
         </>
       );
+      title = 'Sent?';
       footer = (
         <>
           <Button label="Keep a copy" variant="secondary" onPress={onClose} />
           <Button
-            label="Remove from my phone"
-            variant="danger"
+            label={split.length === 0 ? 'Remove from my phone' : 'Update my phone'}
+            variant={split.length === 0 ? 'danger' : 'primary'}
             onPress={() => {
-              onRemove(step.ids);
+              split.forEach((id) => onUpdateGrowth(id, kept[id]));
+              if (whole.length) onRemove(whole);
               onClose();
             }}
           />
         </>
       );
       break;
+    }
 
     case 'sync':
       title = 'Sync with another phone';
@@ -499,6 +572,8 @@ const styles = StyleSheet.create({
   segmentTextOn: { color: colors.primaryText },
   noMargin: { marginTop: 0 },
   list: { flexGrow: 0 },
+  amount: { alignItems: 'center', paddingTop: 10, paddingBottom: 4 },
+  amountLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   selectAll: { alignSelf: 'flex-end', paddingVertical: 4, marginBottom: 8 },
   selectAllText: { fontSize: 15, fontWeight: '600', color: colors.primary },
   row: {
