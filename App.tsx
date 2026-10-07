@@ -8,6 +8,7 @@ import { AddItemModal } from './src/components/AddItemModal';
 import { HomeAssistantModal } from './src/components/HomeAssistantModal';
 import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
+import { TransferModal } from './src/components/TransferModal';
 import { SectionKey, sections } from './src/sections';
 import { colors, radius } from './src/theme';
 import { useHomeAssistant } from './src/useHomeAssistant';
@@ -30,6 +31,11 @@ function HomeScreen() {
     loaded,
     addItem,
     removeItem,
+    removeItems,
+    importPlants,
+    applySnapshot,
+    itemsRef,
+    deletedRef,
     renameItem,
     setTags,
     setWaterEvery,
@@ -45,9 +51,10 @@ function HomeScreen() {
     removePhoto,
     undoLast,
   } = useItems();
-  const homeAssistant = useHomeAssistant(items, loaded);
+  const homeAssistant = useHomeAssistant(items, loaded, { itemsRef, deletedRef, applySnapshot });
   const [adding, setAdding] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sectionKey, setSectionKey] = useState<SectionKey>('overview');
   const selected = items.find((i) => i.id === selectedId) ?? null;
@@ -76,6 +83,15 @@ function HomeScreen() {
             {taskCount > 0 ? ` · ${taskCount} task${taskCount === 1 ? '' : 's'}` : ''}
           </Text>
         </View>
+        <Pressable
+          onPress={() => setTransferring(true)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.haButton, pressed && { opacity: 0.7 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Send or receive plants"
+        >
+          <Text style={styles.haIcon}>📤</Text>
+        </Pressable>
         <Pressable
           onPress={() => setLinking(true)}
           hitSlop={8}
@@ -185,6 +201,17 @@ function HomeScreen() {
         onConnect={homeAssistant.connect}
         onDisconnect={homeAssistant.disconnect}
         onSyncNow={homeAssistant.syncNow}
+        sharing={homeAssistant.sharing}
+        onSetShare={homeAssistant.setShare}
+      />
+      <TransferModal
+        visible={transferring}
+        onClose={() => setTransferring(false)}
+        items={items}
+        onImport={importPlants}
+        onRemove={removeItems}
+        deletedRef={deletedRef}
+        onSync={applySnapshot}
       />
       <AddItemModal visible={adding} onClose={() => setAdding(false)} onSave={addItem} />
       <ItemDetailModal
@@ -213,7 +240,7 @@ function HomeScreen() {
 const styles = StyleSheet.create({
   flex: { flexGrow: 1 },
   screen: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
   haButton: {
     width: 44,
     height: 44,

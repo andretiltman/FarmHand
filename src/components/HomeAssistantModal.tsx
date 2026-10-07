@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { formatDateTime } from '../dates';
 import { buildSensors, HAConfig } from '../homeAssistant';
@@ -18,10 +18,13 @@ interface Props {
   onConnect: (config: HAConfig) => Promise<void>;
   onDisconnect: () => void;
   onSyncNow: () => void;
+  sharing: boolean;
+  onSetShare: (share: boolean) => void;
 }
 
 /** Link FarmHand to Home Assistant so each plant, animal and maintenance task shows up there as a sensor. */
-export function HomeAssistantModal({ visible, onClose, items, config, status, onConnect, onDisconnect, onSyncNow }: Props) {
+export function HomeAssistantModal(props: Props) {
+  const { visible, onClose, items, config, status, onConnect, onDisconnect, onSyncNow, sharing, onSetShare } = props;
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -86,6 +89,32 @@ export function HomeAssistantModal({ visible, onClose, items, config, status, on
             <Text style={styles.help}>
               Sensors update whenever you change something, and every 15 minutes while FarmHand is open.
             </Text>
+
+            <View style={styles.shareRow}>
+              <View style={styles.flex}>
+                <Text style={styles.shareTitle}>🔄 Sync with other phones</Text>
+                <Text style={styles.hint}>
+                  Share your plants, animals and tasks with someone else using this Home Assistant – turn this on on
+                  both phones. Changes come through within a minute while FarmHand is open. Photos stay on the phone
+                  that took them (send them with 📤 → Sync).
+                </Text>
+              </View>
+              <Switch
+                value={sharing}
+                onValueChange={onSetShare}
+                trackColor={{ true: colors.plant, false: colors.border }}
+                accessibilityLabel="Sync with other phones"
+              />
+            </View>
+            {sharing ? (
+              <Text style={styles.peers}>
+                {status.peers.length === 0
+                  ? 'No other phones yet – turn sync on on the other phone too.'
+                  : status.peers
+                      .map((p, i) => `Phone ${i + 1}: last change ${formatDateTime(p.sentAt)}`)
+                      .join('\n')}
+              </Text>
+            ) : null}
           </>
         ) : (
           <>
@@ -146,7 +175,20 @@ export function HomeAssistantModal({ visible, onClose, items, config, status, on
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   help: { fontSize: 14, color: colors.text, lineHeight: 20 },
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 18,
+    padding: 12,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  shareTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
+  peers: { fontSize: 13, color: colors.plant, marginTop: 8, lineHeight: 19 },
   label: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8, marginTop: 18 },
   input: {
     borderWidth: 1,

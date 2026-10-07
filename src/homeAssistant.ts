@@ -1,6 +1,7 @@
 import { findCrop } from './crops';
 import { growthStatus, transplantSuccess } from './growth';
 import { animalSummary, plantSummary, taskSummary } from './stats';
+import { checkSnapshot, isSnapshot, SyncSnapshot } from './sync';
 import { TrackedItem } from './types';
 
 /** Where to reach Home Assistant, and a long-lived access token (Profile → Security in HA). */
@@ -215,4 +216,43 @@ export async function removeSensors(config: HAConfig, entityIds: string[]): Prom
   for (const id of entityIds) {
     await request(config, 'DELETE', `/api/states/${id}`).catch(() => undefined);
   }
+}
+
+/**
+ * Phones syncing through Home Assistant each keep a copy of everything in their own hidden entity,
+ * e.g. farmhand_sync.phone_3fa9c2e81b07, and read the other phones' entities.
+ */
+const SYNC_DOMAIN = 'farmhand_sync';
+
+export function syncEntityId(deviceId: string): string {
+  return `${SYNC_DOMAIN}.phone_${deviceId}`;
+}
+
+/** Publishes this phone's copy for the other phones to pick up. */
+export async function pushSnapshot(config: HAConfig, snapshot: SyncSnapshot): Promise<void> {
+  const entityId = syncEntityId(snapshot.deviceId);
+  const res = await request(config, 'POST', `/api/states/${entityId}`, {
+    state: snapshot.sentAt,
+    attributes: { friendly_name: 'FarmHand sync data', icon: 'mdi:sync', data: snapshot },
+  });
+  if (!res.ok) throw new Error(`Couldn't save sync data in Home Assistant (error ${res.status}).`);
+}
+
+/** The copies published by every other phone. */
+export async function pullSnapshots(config: HAConfig, ownDeviceId: string): Promise<SyncSnapshot[]> {
+  const res = await request(config, 'GET', '/api/states');
+  if (!res.ok) throw new Error(`Couldn't read sync data from Home Assistant (error ${res.status}).`);
+  const states = (await res.json()) as { entity_id: string; attributes?: { data?: unknown } }[];
+  const own = syncEntityId(ownDeviceId);
+  return states
+    .filter((s) => s.entity_id.startsWith(`${SYNC_DOMAIN}.`) && s.entity_id !== own)
+    .map((s) => s.attributes?.data)
+    .filter(isSnapshot)
+    .flatMap((data) => {
+      try {
+        return [checkSnapshot(data)];
+      } catch {
+        return []; // e.g. from a newer version of FarmHand
+      }
+    });
 }

@@ -30,9 +30,19 @@ export interface PlantPhoto {
   /** Permanent file URI on device (data: URL on web). */
   uri: string;
   takenAt: string;
+  /** When it was added to FarmHand (takenAt can be set to an older date). Absent on older photos. */
+  addedAt?: string;
 }
 
-export interface PlantItem {
+/** Bookkeeping that lets two phones merge their copies of the same item (see sync.ts). */
+export interface Syncable {
+  /** When each field was last changed (ISO), keyed by field name – the newest change wins when syncing. */
+  changed?: Record<string, string>;
+  /** History entries and photos that were removed (e.g. "water:<date>", "photo:<id>"), so syncing doesn't bring them back. */
+  removed?: string[];
+}
+
+export interface PlantItem extends Syncable {
   id: string;
   kind: 'plant';
   name: string;
@@ -55,7 +65,7 @@ export interface EggLog {
   count: number;
 }
 
-export interface AnimalItem {
+export interface AnimalItem extends Syncable {
   id: string;
   kind: 'animal';
   name: string;
@@ -71,7 +81,7 @@ export interface AnimalItem {
 }
 
 /** A recurring maintenance job, e.g. adding bio enzymes to the septic tank. */
-export interface TaskItem {
+export interface TaskItem extends Syncable {
   id: string;
   kind: 'task';
   name: string;

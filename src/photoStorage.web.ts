@@ -17,3 +17,13 @@ export async function savePhoto(pickedUri: string, _id: string): Promise<string>
 export function deletePhoto(_uri: string): void {
   // Nothing to clean up – the data lives inside the saved item.
 }
+
+/** Photos are already data: URLs on the web. */
+export async function photoToDataUrl(uri: string): Promise<string> {
+  return uri;
+}
+
+/** Downscales a received photo so it fits in browser storage. */
+export function saveDataUrlPhoto(dataUrl: string, id: string): Promise<string> {
+  return savePhoto(dataUrl, id);
+}
