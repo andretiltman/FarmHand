@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { findCrop } from '../crops';
 import { formatDateTime } from '../dates';
-import { growthStatus, MilestoneKey, StageAction } from '../growth';
+import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
 import { animalSummary, plantSummary } from '../stats';
 import { colors, radius } from '../theme';
 import { Growth, TrackedItem } from '../types';
@@ -40,12 +40,15 @@ export function ItemDetailModal(props: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [view, setView] = useState<View_>({ kind: 'main' });
+  /** Seedlings to record when marking as transplanted; null means "all of them". */
+  const [transplantCount, setTransplantCount] = useState<number | null>(null);
 
   useEffect(() => {
     setEggCount(1);
     setConfirmDelete(false);
     setShowGuide(false);
     setView({ kind: 'main' });
+    setTransplantCount(null);
   }, [item?.id]);
 
   if (!item) return null;
@@ -58,6 +61,9 @@ export function ItemDetailModal(props: Props) {
   const growth = item.kind === 'plant' ? item.growth : undefined;
   const status = growth && growthStatus(growth);
   const crop = growth && findCrop(growth.cropId);
+  const seedsSown = growth?.seedsSown;
+  const success = growth && transplantSuccess(growth);
+  const seedlingsToTransplant = seedsSown ? Math.min(transplantCount ?? seedsSown, seedsSown) : undefined;
   if (item.kind === 'plant') {
     const s = plantSummary(item);
     stats = [
@@ -87,7 +93,11 @@ export function ItemDetailModal(props: Props) {
       const events: [string | undefined, string, boolean][] = [
         [growth.sownAt, growth.method === 'direct' ? '🌰  Sown in the ground' : '🌰  Sown in seed tray', false],
         [growth.sproutedAt, '🌱  Marked as seedling', true],
-        [growth.transplantedAt, '🪴  Transplanted', true],
+        [
+          growth.transplantedAt,
+          success ? `🪴  Transplanted ${success.transplanted} of ${success.sown}` : '🪴  Transplanted',
+          true,
+        ],
         [growth.harvestedAt, '🧺  Harvested', true],
       ];
       for (const [date, label, undoable] of events) {
@@ -217,13 +227,34 @@ export function ItemDetailModal(props: Props) {
             {status.nextAction === 'transplanted' && (
               <Text style={styles.growthNote}>The harvest countdown starts once you mark it as transplanted.</Text>
             )}
+            {status.nextAction === 'transplanted' && seedsSown !== undefined && (
+              <View style={styles.countBlock}>
+                <Text style={styles.countLabel}>How many seedlings made it?</Text>
+                <Stepper
+                  label="Seedlings to transplant"
+                  value={seedlingsToTransplant!}
+                  onChange={setTransplantCount}
+                  min={0}
+                  max={seedsSown}
+                  suffix={`of ${seedsSown}`}
+                />
+              </View>
+            )}
             {status.nextAction && (
               <View style={styles.actionRow}>
                 <Button
                   {...STAGE_BUTTON[status.nextAction]}
                   variant={status.nextAction === 'sprouted' ? 'secondary' : 'primary'}
                   color={status.needsAction ? colors.warning : colors.plant}
-                  onPress={() => onAdvance(item.id, status.nextAction!)}
+                  onPress={() =>
+                    status.nextAction === 'transplanted' && seedlingsToTransplant !== undefined
+                      ? props.onUpdateGrowth(item.id, {
+                          ...growth!,
+                          transplantedAt: new Date().toISOString(),
+                          transplantedCount: seedlingsToTransplant,
+                        })
+                      : onAdvance(item.id, status.nextAction!)
+                  }
                 />
               </View>
             )}
@@ -239,6 +270,49 @@ export function ItemDetailModal(props: Props) {
                 </Text>
                 {showGuide && <CropGuide crop={crop} method={growth!.method} />}
               </>
+            )}
+          </View>
+        )}
+
+        {growth && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Seeds</Text>
+            <View style={styles.seedRow}>
+              <Text style={styles.seedLabel}>Sown</Text>
+              <Stepper
+                label="Seeds sown"
+                value={seedsSown ?? 1}
+                onChange={(n) =>
+                  props.onUpdateGrowth(item.id, {
+                    ...growth,
+                    seedsSown: n,
+                    transplantedCount:
+                      growth.transplantedCount === undefined ? undefined : Math.min(growth.transplantedCount, n),
+                  })
+                }
+                max={999}
+                suffix={seedsSown === 1 ? 'seed' : 'seeds'}
+              />
+            </View>
+            {growth.method === 'transplant' && growth.transplantedAt && (
+              <View style={styles.seedRow}>
+                <Text style={styles.seedLabel}>Transplanted</Text>
+                <Stepper
+                  label="Seedlings transplanted"
+                  value={growth.transplantedCount ?? seedsSown ?? 1}
+                  onChange={(n) =>
+                    props.onUpdateGrowth(item.id, { ...growth, seedsSown: seedsSown ?? 1, transplantedCount: n })
+                  }
+                  min={0}
+                  max={seedsSown ?? 1}
+                  suffix={`of ${seedsSown ?? 1}`}
+                />
+              </View>
+            )}
+            {success && (
+              <Text style={styles.successLine}>
+                🪴 {success.transplanted} of {success.sown} seeds made it to transplanting ({success.percent}%)
+              </Text>
             )}
           </View>
         )}
@@ -327,6 +401,11 @@ const styles = StyleSheet.create({
   journeyHint: { fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: 4 },
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 8 },
+  seedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  seedLabel: { fontSize: 14, color: colors.text },
+  successLine: { fontSize: 14, fontWeight: '600', color: colors.plant, marginTop: 4 },
+  countBlock: { alignItems: 'center', marginTop: 16 },
+  countLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   growthHeadline: { fontSize: 17, fontWeight: '700', marginTop: 16, textAlign: 'center' },
   guideToggle: { fontSize: 15, fontWeight: '600', color: colors.water, marginTop: 16, marginBottom: 8 },
   growthNote: { fontSize: 13, color: colors.muted, marginTop: 4, textAlign: 'center' },

@@ -217,8 +217,27 @@ export function resetMilestone(g: Growth, key: MilestoneKey, crop: Crop | undefi
         daysToSeedlingMax: crop ? crop.guide.germinationDays?.[1] : g.daysToSeedlingMax,
       };
     case 'transplant':
-      return { ...g, transplantedAt: undefined, daysToTransplant: crop?.daysToTransplant ?? g.daysToTransplant };
+      return {
+        ...g,
+        transplantedAt: undefined,
+        transplantedCount: undefined,
+        daysToTransplant: crop?.daysToTransplant ?? g.daysToTransplant,
+      };
     case 'harvest':
       return { ...g, harvestedAt: undefined, daysToHarvest: crop?.daysToHarvest ?? g.daysToHarvest };
   }
+}
+
+export interface TransplantSuccess {
+  sown: number;
+  transplanted: number;
+  /** Whole-number percentage of seeds that made it to transplanting. */
+  percent: number;
+}
+
+/** How many of the sown seeds made it to transplanting, once both counts are known. */
+export function transplantSuccess(g: Growth): TransplantSuccess | null {
+  if (g.method !== 'transplant' || !g.transplantedAt || !g.seedsSown || g.transplantedCount === undefined) return null;
+  const transplanted = Math.min(g.transplantedCount, g.seedsSown);
+  return { sown: g.seedsSown, transplanted, percent: Math.round((transplanted / g.seedsSown) * 100) };
 }

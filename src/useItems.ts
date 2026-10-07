@@ -29,7 +29,9 @@ function undoPlant(plant: PlantItem): PlantItem {
   }
   if (!newest) return plant;
   if (newest.field === 'water') return { ...plant, waterings: plant.waterings.slice(1) };
-  return { ...plant, growth: { ...plant.growth!, [newest.field]: undefined } };
+  const growth = { ...plant.growth!, [newest.field]: undefined };
+  if (newest.field === 'transplantedAt') growth.transplantedCount = undefined;
+  return { ...plant, growth };
 }
 
 function makeId(): string {

@@ -15,9 +15,13 @@ export interface Growth {
   /** From seedling (direct) or from transplanting (transplant). */
   daysToHarvest: number;
   sownAt: string;
+  /** How many seeds were sown. Absent for plants added before seed counts were tracked. */
+  seedsSown?: number;
   /** Set when the user marks it sprouted early; otherwise the seedling stage starts on the estimated date. */
   sproutedAt?: string;
   transplantedAt?: string;
+  /** How many seedlings made it to transplanting (out of `seedsSown`). */
+  transplantedCount?: number;
   harvestedAt?: string;
 }
 
