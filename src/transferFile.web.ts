@@ -5,7 +5,7 @@ export async function shareTransferFile(name: string, text: string): Promise<voi
   const file = new File([text], name, { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'FarmHand plants' });
+      await navigator.share({ files: [file], title: name });
       return;
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') return;

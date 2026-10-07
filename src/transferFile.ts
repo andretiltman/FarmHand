@@ -8,7 +8,7 @@ export async function shareTransferFile(name: string, text: string): Promise<voi
   const file = new File(Paths.cache, name);
   if (file.exists) file.delete();
   file.write(text);
-  await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json', dialogTitle: 'Send plants' });
+  await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json', dialogTitle: 'Send with…' });
 }
 
 /** Lets the user pick a received file and returns its text, or null if they cancelled. */

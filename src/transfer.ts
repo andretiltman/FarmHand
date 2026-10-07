@@ -1,5 +1,6 @@
 import { photoToDataUrl } from './photoStorage';
-import { PlantItem } from './types';
+import { checkSnapshot, Deleted, isSnapshot, makeSnapshot, SyncSnapshot } from './sync';
+import { PlantItem, TrackedItem } from './types';
 
 /** Marks a file as FarmHand plants, so we can tell it apart from any other JSON file. */
 const FORMAT = 'farmhand-plants';
@@ -41,11 +42,11 @@ export function unpackPlants(text: string): TransferFile {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error("That file isn't a FarmHand plants file.");
+    throw new Error("That file isn't from FarmHand.");
   }
   const file = data as Partial<TransferFile> | null;
   if (!file || file.format !== FORMAT || !Array.isArray(file.plants)) {
-    throw new Error("That file isn't a FarmHand plants file.");
+    throw new Error("That file isn't from FarmHand.");
   }
   if ((file.version ?? 0) > VERSION) {
     throw new Error('That file was sent from a newer version of FarmHand – update the app and try again.');
@@ -72,4 +73,49 @@ export function transferFileName(plants: PlantItem[]): string {
   const label = plants.length === 1 ? plants[0].name : `${plants.length} plants`;
   const safe = label.replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'plants';
   return `FarmHand - ${safe}.farmhand.json`;
+}
+
+/** Packs everything on this phone into a sync file the other phone merges with theirs (see sync.ts). */
+export async function packSync(
+  deviceId: string,
+  items: TrackedItem[],
+  deleted: Deleted,
+  includePhotos: boolean,
+): Promise<string> {
+  const snapshot = makeSnapshot(deviceId, items, deleted, includePhotos);
+  if (includePhotos) {
+    snapshot.items = await Promise.all(
+      snapshot.items.map(async (item) => {
+        if (item.kind !== 'plant') return item;
+        const photos = [];
+        for (const photo of item.photos) {
+          try {
+            photos.push({ ...photo, uri: await photoToDataUrl(photo.uri) });
+          } catch (e) {
+            console.warn('Skipping a photo that could not be read', e);
+          }
+        }
+        return { ...item, photos };
+      }),
+    );
+  }
+  return JSON.stringify(snapshot);
+}
+
+export type Received = { kind: 'plants'; file: TransferFile } | { kind: 'sync'; snapshot: SyncSnapshot };
+
+/** Works out whether a received file holds plants to add or a sync from another phone. */
+export function unpackReceived(text: string): Received {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("That file isn't from FarmHand.");
+  }
+  if (isSnapshot(data)) return { kind: 'sync', snapshot: checkSnapshot(data) };
+  return { kind: 'plants', file: unpackPlants(text) };
+}
+
+export function syncFileName(): string {
+  return `FarmHand sync ${new Date().toISOString().slice(0, 10)}.farmhand.json`;
 }

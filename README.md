@@ -35,6 +35,9 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
 - **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, change how often a plant needs watering or a task repeats, rename it (✏️ **Rename**), or delete it.
 - **Full screen on Android** – the system navigation bar is hidden while FarmHand is open; swipe up from the bottom edge to bring it back briefly.
 - **Send plants to another phone** – tap 📤 at the top, tick the plants to send (optionally with their photos) and tap **Send**. FarmHand makes a small file and opens your phone's share menu, so you can send it by WhatsApp, email, Bluetooth, Nearby Share or AirDrop. The other person saves the file, taps 📤 → **Receive** → **Choose file**, and the plants are added with their whole journey, watering history, tags and photos. Afterwards the sender can **Remove from my phone** to finish the move, or keep a copy if you're both looking after them.
+- **Sync two phones** – for a garden you look after together. Each phone keeps its own copy and they merge each other's changes: waterings, feedings, eggs and jobs done on either phone are all kept (so you'll both see the plants were watered), and for anything else – a rename, a new watering schedule, a growth stage – the most recent change wins. Deleting something or undoing an entry on one phone removes it on the other too. Two ways to sync:
+  - **Automatically through Home Assistant** – connect both phones to the same Home Assistant (🏠) and turn on **Sync with other phones** on both. Changes come through within a minute while FarmHand is open. Photos stay on the phone that took them.
+  - **With a sync file** – 📤 → **Sync** → **Send sync file** (optionally with photos), and the other phone opens it with 📤 → **Receive**. Do it both ways for a full sync. Handy when one of you is away from home.
 - **Home Assistant sensors** – tap 🏠 at the top, enter your Home Assistant address and a long-lived access token, and every plant, animal and maintenance task appears in Home Assistant as a sensor (see below).
 - Data is saved on the device (AsyncStorage), no account needed.
 
@@ -54,6 +57,8 @@ FarmHand then creates these sensors:
 | `sensor.farmhand_plants_to_water` | number of plants due, overdue or never watered | |
 | `sensor.farmhand_eggs_today` | eggs collected today across all animals | |
 | `sensor.farmhand_tasks_due` | number of maintenance tasks due, overdue or never done | |
+
+With **Sync with other phones** on, each phone also keeps a copy of everything in a hidden `farmhand_sync.phone_<id>` entity and reads the other phones' copies from there.
 
 Sensors are updated whenever you change something, when the app is opened, and every 15 minutes while it's open. Deleting an item removes its sensor, and **Disconnect** removes them all.
 
@@ -89,7 +94,9 @@ src/components/AddItemModal.tsx Guided add popup (plant, animal or maintenance t
 src/components/ItemDetailModal.tsx  Item history / logging / delete
 src/components/HomeAssistantModal.tsx  Connect to Home Assistant
 src/components/TransferModal.tsx  Send plants to / receive plants from another phone
-src/transfer.ts                 Plant transfer file format (pack / unpack)
+src/transfer.ts                 Plant transfer and sync file formats (pack / unpack)
+src/sync.ts                     Merging two phones' copies of the items
+src/ids.ts, src/device.ts       Item GUIDs and this phone's id
 src/transferFile(.web).ts       Share sheet and file picker for transfer files
 src/components/ItemCard.tsx     A row in the list
 src/components/Journey.tsx      Growth timeline

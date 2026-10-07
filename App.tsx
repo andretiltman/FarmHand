@@ -33,6 +33,9 @@ function HomeScreen() {
     removeItem,
     removeItems,
     importPlants,
+    applySnapshot,
+    itemsRef,
+    deletedRef,
     renameItem,
     setTags,
     setWaterEvery,
@@ -48,7 +51,7 @@ function HomeScreen() {
     removePhoto,
     undoLast,
   } = useItems();
-  const homeAssistant = useHomeAssistant(items, loaded);
+  const homeAssistant = useHomeAssistant(items, loaded, { itemsRef, deletedRef, applySnapshot });
   const [adding, setAdding] = useState(false);
   const [linking, setLinking] = useState(false);
   const [transferring, setTransferring] = useState(false);
@@ -198,6 +201,8 @@ function HomeScreen() {
         onConnect={homeAssistant.connect}
         onDisconnect={homeAssistant.disconnect}
         onSyncNow={homeAssistant.syncNow}
+        sharing={homeAssistant.sharing}
+        onSetShare={homeAssistant.setShare}
       />
       <TransferModal
         visible={transferring}
@@ -205,6 +210,8 @@ function HomeScreen() {
         items={items}
         onImport={importPlants}
         onRemove={removeItems}
+        deletedRef={deletedRef}
+        onSync={applySnapshot}
       />
       <AddItemModal visible={adding} onClose={() => setAdding(false)} onSave={addItem} />
       <ItemDetailModal

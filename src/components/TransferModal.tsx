@@ -1,10 +1,21 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { MutableRefObject, ReactNode, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { findCrop } from '../crops';
 import { growthStatus } from '../growth';
 import { colors, radius } from '../theme';
-import { packPlants, TransferFile, transferFileName, TransferPlant, unpackPlants } from '../transfer';
+import { getDeviceId } from '../device';
+import { Deleted, MergeResult, SyncSnapshot } from '../sync';
+import {
+  packPlants,
+  packSync,
+  Received,
+  syncFileName,
+  TransferFile,
+  transferFileName,
+  TransferPlant,
+  unpackReceived,
+} from '../transfer';
 import { pickTransferFile, shareTransferFile } from '../transferFile';
 import { PlantItem, TrackedItem } from '../types';
 import { Button } from './Button';
@@ -16,17 +27,24 @@ interface Props {
   items: TrackedItem[];
   onImport: (plants: TransferPlant[]) => Promise<void>;
   onRemove: (ids: string[]) => void;
+  deletedRef: MutableRefObject<Deleted>;
+  onSync: (snapshot: SyncSnapshot) => Promise<MergeResult>;
 }
 
 type Step =
   | { kind: 'menu' }
   | { kind: 'send' }
   | { kind: 'sent'; ids: string[] }
-  | { kind: 'receive'; file: TransferFile | null }
-  | { kind: 'received'; count: number };
+  | { kind: 'sync' }
+  | { kind: 'receive'; received: Received | null }
+  | { kind: 'received'; count: number }
+  | { kind: 'synced'; result: MergeResult };
 
-/** Send plants to another phone as a file (via WhatsApp, email, Bluetooth, …), or add plants someone sent you. */
-export function TransferModal({ visible, onClose, items, onImport, onRemove }: Props) {
+/**
+ * Send plants to another phone as a file (via WhatsApp, email, Bluetooth, …), add plants someone sent you,
+ * or sync everything with another phone by swapping sync files.
+ */
+export function TransferModal({ visible, onClose, items, onImport, onRemove, deletedRef, onSync }: Props) {
   const plants = items.filter((i): i is PlantItem => i.kind === 'plant');
   const [step, setStep] = useState<Step>({ kind: 'menu' });
   const [selected, setSelected] = useState<string[]>([]);
@@ -61,7 +79,7 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
   };
 
   const chosen = plants.filter((p) => selected.includes(p.id));
-  const photoCount = chosen.reduce((n, p) => n + p.photos.length, 0);
+  const photoCount = (step.kind === 'sync' ? plants : chosen).reduce((n, p) => n + p.photos.length, 0);
 
   const send = () =>
     run(async () => {
@@ -70,10 +88,22 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
       go({ kind: 'sent', ids: chosen.map((p) => p.id) });
     });
 
+  const sendSync = () =>
+    run(async () => {
+      const text = await packSync(await getDeviceId(), items, deletedRef.current, includePhotos);
+      await shareTransferFile(syncFileName(), text);
+      onClose();
+    });
+
   const choose = () =>
     run(async () => {
       const text = await pickTransferFile();
-      if (text !== null) go({ kind: 'receive', file: unpackPlants(text) });
+      if (text !== null) go({ kind: 'receive', received: unpackReceived(text) });
+    });
+
+  const merge = (snapshot: SyncSnapshot) =>
+    run(async () => {
+      go({ kind: 'synced', result: await onSync(snapshot) });
     });
 
   const receive = (file: TransferFile) =>
@@ -86,6 +116,21 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const allSelected = plants.length > 0 && selected.length === plants.length;
 
+  const photoSwitch =
+    photoCount > 0 ? (
+      <View style={styles.switchRow}>
+        <View style={styles.flex}>
+          <Text style={styles.switchLabel}>Include photos ({photoCount})</Text>
+          <Text style={styles.hint}>Photos make the file much bigger.</Text>
+        </View>
+        <Switch
+          value={includePhotos}
+          onValueChange={setIncludePhotos}
+          trackColor={{ true: colors.plant, false: colors.border }}
+        />
+      </View>
+    ) : null;
+
   let title = 'Send or receive plants';
   let body: ReactNode;
   let footer: ReactNode = null;
@@ -95,7 +140,8 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
       body = (
         <>
           <Text style={styles.help}>
-            Move plants to someone else's phone – with their whole journey, watering history, tags and photos.
+            Move plants to someone else's phone – with their whole journey, watering history, tags and photos – or
+            sync with a phone you share the garden with.
           </Text>
           <View style={styles.choiceRow}>
             <Choice emoji="📤" title="Send" desc="Share plants as a file" onPress={() => go({ kind: 'send' })} />
@@ -103,9 +149,21 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
               emoji="📥"
               title="Receive"
               desc="Add plants someone sent you"
-              onPress={() => go({ kind: 'receive', file: null })}
+              onPress={() => go({ kind: 'receive', received: null })}
             />
           </View>
+          <Pressable
+            onPress={() => go({ kind: 'sync' })}
+            style={({ pressed }) => [styles.syncChoice, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Sync with another phone"
+          >
+            <Text style={styles.syncEmoji}>🔄</Text>
+            <View style={styles.flex}>
+              <Text style={[styles.choiceTitle, styles.noMargin]}>Sync</Text>
+              <Text style={styles.syncDesc}>Keep two phones up to date with each other's changes</Text>
+            </View>
+          </Pressable>
         </>
       );
       break;
@@ -127,19 +185,7 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
             {plants.map((p) => (
               <PlantRow key={p.id} plant={p} checked={selected.includes(p.id)} onPress={() => toggle(p.id)} />
             ))}
-            {photoCount > 0 ? (
-              <View style={styles.switchRow}>
-                <View style={styles.flex}>
-                  <Text style={styles.switchLabel}>Include photos ({photoCount})</Text>
-                  <Text style={styles.hint}>Photos make the file much bigger.</Text>
-                </View>
-                <Switch
-                  value={includePhotos}
-                  onValueChange={setIncludePhotos}
-                  trackColor={{ true: colors.plant, false: colors.border }}
-                />
-              </View>
-            ) : null}
+            {photoSwitch}
             {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
           </ScrollView>
         );
@@ -182,13 +228,37 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
       );
       break;
 
+    case 'sync':
+      title = 'Sync with another phone';
+      body = (
+        <ScrollView style={styles.list}>
+          <Text style={styles.help}>
+            Sends everything on this phone – plants, animals and tasks. The other phone taps 📥 Receive and your changes
+            are merged with theirs: waterings, feedings and eggs from both phones are kept, and for anything else the
+            most recent change wins. Then do the same the other way round.
+          </Text>
+          <Text style={[styles.hint, styles.spaced]}>
+            Both on the same Home Assistant? Turn on 🏠 → Sync with other phones and this happens automatically.
+          </Text>
+          {photoSwitch}
+          {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
+        </ScrollView>
+      );
+      footer = (
+        <>
+          <Button label="Back" variant="secondary" onPress={() => go({ kind: 'menu' })} />
+          <Button label={busy ? 'Preparing…' : 'Send sync file'} onPress={sendSync} disabled={busy} />
+        </>
+      );
+      break;
+
     case 'receive':
-      title = 'Receive plants';
-      if (!step.file) {
+      title = 'Receive';
+      if (!step.received) {
         body = (
           <>
             <Text style={styles.help}>
-              Ask the other person to tap 📤 Send. When the file arrives (e.g. in WhatsApp or your email), save it to your
+              Ask the other person to tap 📤 Send or Sync. When the file arrives (e.g. in WhatsApp or your email), save it to your
               phone, then choose it here.
             </Text>
             {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
@@ -200,8 +270,26 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
             <Button label={busy ? 'Opening…' : 'Choose file'} onPress={choose} disabled={busy} />
           </>
         );
+      } else if (step.received.kind === 'sync') {
+        const snapshot = step.received.snapshot;
+        title = 'Sync from another phone';
+        body = (
+          <>
+            <Text style={styles.help}>
+              This file has {snapshot.items.length} item{snapshot.items.length === 1 ? '' : 's'} from another phone.
+              Their changes will be merged with yours – nothing you've logged here is lost.
+            </Text>
+            {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
+          </>
+        );
+        footer = (
+          <>
+            <Button label="Cancel" variant="secondary" onPress={() => go({ kind: 'receive', received: null })} />
+            <Button label={busy ? 'Syncing…' : 'Sync'} onPress={() => merge(snapshot)} disabled={busy} />
+          </>
+        );
       } else {
-        const file = step.file;
+        const file = step.received.file;
         body = (
           <ScrollView style={styles.list}>
             <Text style={styles.help}>
@@ -216,7 +304,7 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
         );
         footer = (
           <>
-            <Button label="Cancel" variant="secondary" onPress={() => go({ kind: 'receive', file: null })} />
+            <Button label="Cancel" variant="secondary" onPress={() => go({ kind: 'receive', received: null })} />
             <Button
               label={busy ? 'Adding…' : file.plants.length > 1 ? `Add ${file.plants.length} plants` : 'Add plant'}
               onPress={() => receive(file)}
@@ -237,6 +325,24 @@ export function TransferModal({ visible, onClose, items, onImport, onRemove }: P
       );
       footer = <Button label="Done" onPress={onClose} />;
       break;
+
+    case 'synced': {
+      const { added, updated, removed } = step.result;
+      const parts = [
+        added ? `${added} new` : '',
+        updated ? `${updated} updated` : '',
+        removed ? `${removed} removed` : '',
+      ].filter(Boolean);
+      title = 'Synced';
+      body = (
+        <Text style={styles.help}>
+          ✅ {parts.length ? `${parts.join(', ')}.` : 'You were already up to date.'} To send your changes back, tap 🔄
+          Sync and send them a sync file too.
+        </Text>
+      );
+      footer = <Button label="Done" onPress={onClose} />;
+      break;
+    }
   }
 
   return (
@@ -317,6 +423,22 @@ const styles = StyleSheet.create({
   choiceEmoji: { fontSize: 40 },
   choiceTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginTop: 8 },
   choiceDesc: { fontSize: 13, color: colors.muted, textAlign: 'center', marginTop: 4 },
+  syncChoice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 12,
+    borderWidth: 2,
+    borderColor: colors.water,
+    backgroundColor: colors.waterSoft,
+    borderRadius: radius.md,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  syncEmoji: { fontSize: 34 },
+  syncDesc: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  spaced: { marginTop: 12 },
+  noMargin: { marginTop: 0 },
   list: { flexGrow: 0 },
   selectAll: { alignSelf: 'flex-end', paddingVertical: 4, marginBottom: 8 },
   selectAllText: { fontSize: 15, fontWeight: '600', color: colors.primary },
