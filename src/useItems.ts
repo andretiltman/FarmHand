@@ -9,7 +9,14 @@ const STORAGE_KEY = 'farmhand.items.v1';
 
 /** Fills in fields added after an item was first saved. */
 function migrate(item: TrackedItem): TrackedItem {
-  return item.kind === 'animal' ? { ...item, feedings: item.feedings ?? [] } : { ...item, photos: item.photos ?? [], tags: item.tags ?? [] };
+  switch (item.kind) {
+    case 'animal':
+      return { ...item, feedings: item.feedings ?? [] };
+    case 'plant':
+      return { ...item, photos: item.photos ?? [], tags: item.tags ?? [] };
+    case 'task':
+      return item;
+  }
 }
 
 const STAGE_FIELD: Record<StageAction, 'sproutedAt' | 'transplantedAt' | 'harvestedAt'> = {
@@ -38,7 +45,7 @@ function makeId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** All tracked plants/animals, persisted on-device with AsyncStorage. */
+/** All tracked plants, animals and maintenance tasks, persisted on-device with AsyncStorage. */
 export function useItems() {
   const [items, setItems] = useState<TrackedItem[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -67,7 +74,9 @@ export function useItems() {
     const item: TrackedItem =
       input.kind === 'plant'
         ? { ...input, ...base, waterings: [], photos: [] }
-        : { ...input, ...base, eggs: [], feedings: [] };
+        : input.kind === 'animal'
+          ? { ...input, ...base, eggs: [], feedings: [] }
+          : { ...input, ...base };
     setItems((prev) => [item, ...prev]);
   }, []);
 
@@ -141,6 +150,15 @@ export function useItems() {
     );
   }, []);
 
+  const completeTask = useCallback((id: string) => {
+    const now = new Date().toISOString();
+    setItems((prev) => prev.map((i) => (i.id === id && i.kind === 'task' ? { ...i, done: [now, ...i.done] } : i)));
+  }, []);
+
+  const setTaskEvery = useCallback((id: string, everyDays: number) => {
+    setItems((prev) => prev.map((i) => (i.id === id && i.kind === 'task' ? { ...i, everyDays } : i)));
+  }, []);
+
   const logEggs = useCallback((id: string, count: number) => {
     if (count <= 0) return;
     const entry = { date: new Date().toISOString(), count };
@@ -172,6 +190,7 @@ export function useItems() {
       prev.map((i) => {
         if (i.id !== id) return i;
         if (i.kind === 'plant') return undoPlant(i);
+        if (i.kind === 'task') return { ...i, done: i.done.slice(1) };
         const lastEgg = i.eggs[0]?.date ?? '';
         const lastFeed = i.feedings[0] ?? '';
         if (!lastEgg && !lastFeed) return i;
@@ -191,6 +210,8 @@ export function useItems() {
     waterPlant,
     logEggs,
     feedAnimal,
+    completeTask,
+    setTaskEvery,
     advanceStage,
     updateGrowth,
     addPhoto,

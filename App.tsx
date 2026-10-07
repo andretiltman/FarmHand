@@ -1,13 +1,14 @@
 import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddItemModal } from './src/components/AddItemModal';
 import { HomeAssistantModal } from './src/components/HomeAssistantModal';
 import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
+import { SectionKey, sections } from './src/sections';
 import { colors, radius } from './src/theme';
 import { useHomeAssistant } from './src/useHomeAssistant';
 import { useItems } from './src/useItems';
@@ -35,6 +36,8 @@ function HomeScreen() {
     waterPlant,
     logEggs,
     feedAnimal,
+    completeTask,
+    setTaskEvery,
     advanceStage,
     updateGrowth,
     addPhoto,
@@ -46,10 +49,22 @@ function HomeScreen() {
   const [adding, setAdding] = useState(false);
   const [linking, setLinking] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sectionKey, setSectionKey] = useState<SectionKey>('overview');
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
+  const bySection = useMemo(() => {
+    const now = new Date();
+    return Object.fromEntries(sections.map((s) => [s.key, items.filter((i) => s.includes(i, now))])) as Record<
+      SectionKey,
+      typeof items
+    >;
+  }, [items]);
+  const section = sections.find((s) => s.key === sectionKey)!;
+  const visible = bySection[sectionKey];
+
   const plantCount = items.filter((i) => i.kind === 'plant').length;
-  const animalCount = items.length - plantCount;
+  const animalCount = items.filter((i) => i.kind === 'animal').length;
+  const taskCount = items.filter((i) => i.kind === 'task').length;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -58,6 +73,7 @@ function HomeScreen() {
           <Text style={styles.title}>FarmHand</Text>
           <Text style={styles.subtitle}>
             {plantCount} plant{plantCount === 1 ? '' : 's'} · {animalCount} animal{animalCount === 1 ? '' : 's'}
+            {taskCount > 0 ? ` · ${taskCount} task${taskCount === 1 ? '' : 's'}` : ''}
           </Text>
         </View>
         <Pressable
@@ -74,13 +90,52 @@ function HomeScreen() {
         </Pressable>
       </View>
 
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabsScroll}
+        contentContainerStyle={styles.tabs}
+      >
+        {sections.map((s) => {
+          const on = s.key === sectionKey;
+          const count = bySection[s.key].length;
+          return (
+            <Pressable
+              key={s.key}
+              onPress={() => setSectionKey(s.key)}
+              style={({ pressed }) => [styles.tab, on && styles.tabOn, pressed && { opacity: 0.7 }]}
+              accessibilityRole="tab"
+              aria-selected={on}
+              accessibilityLabel={`${s.label}, ${count}`}
+            >
+              <Text style={[styles.tabText, on && styles.tabTextOn]}>
+                {s.emoji} {s.label}
+              </Text>
+              {count > 0 ? (
+                <View
+                  style={[
+                    styles.badge,
+                    s.key === 'overview' && !on && styles.badgeAlert,
+                    on && styles.badgeOn,
+                  ]}
+                >
+                  <Text style={[styles.badgeText, (on || s.key === 'overview') && styles.badgeTextOn]}>
+                    {count}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
       {!loaded ? (
         <ActivityIndicator style={styles.flex} color={colors.primary} />
       ) : (
         <FlatList
-          data={items}
+          data={visible}
           keyExtractor={(i) => i.id}
-          contentContainerStyle={[styles.list, items.length === 0 && styles.flex]}
+          contentContainerStyle={[styles.list, visible.length === 0 && styles.flex]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
             <ItemCard
@@ -89,14 +144,23 @@ function HomeScreen() {
               onWater={() => waterPlant(item.id)}
               onFeed={() => feedAnimal(item.id)}
               onEgg={() => logEggs(item.id, 1)}
+              onDone={() => completeTask(item.id)}
             />
           )}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>🌱🐔</Text>
-              <Text style={styles.emptyTitle}>Nothing tracked yet</Text>
-              <Text style={styles.emptyText}>Tap “Add” below to start tracking a plant or your chickens.</Text>
-            </View>
+            items.length === 0 ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyEmoji}>🌱🐔</Text>
+                <Text style={styles.emptyTitle}>Nothing tracked yet</Text>
+                <Text style={styles.emptyText}>Tap “Add” below to start tracking a plant, your chickens or a maintenance job.</Text>
+              </View>
+            ) : (
+              <View style={styles.empty}>
+                <Text style={styles.emptyEmoji}>{sectionKey === 'overview' ? '✅' : section.emoji}</Text>
+                <Text style={styles.emptyTitle}>{section.emptyTitle}</Text>
+                <Text style={styles.emptyText}>{section.emptyText}</Text>
+              </View>
+            )
           }
         />
       )}
@@ -106,7 +170,7 @@ function HomeScreen() {
           onPress={() => setAdding(true)}
           style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.8 }]}
           accessibilityRole="button"
-          accessibilityLabel="Add a plant or animal"
+          accessibilityLabel="Add a plant, animal or maintenance task"
         >
           <Text style={styles.addText}>＋ Add</Text>
         </Pressable>
@@ -129,6 +193,8 @@ function HomeScreen() {
         onWater={waterPlant}
         onLogEggs={logEggs}
         onFeed={feedAnimal}
+        onCompleteTask={completeTask}
+        onSetTaskEvery={setTaskEvery}
         onAdvance={advanceStage}
         onUpdateGrowth={updateGrowth}
         onAddPhoto={addPhoto}
@@ -173,6 +239,35 @@ const styles = StyleSheet.create({
   haDotError: { backgroundColor: colors.danger },
   title: { fontSize: 30, fontWeight: '800', color: colors.text },
   subtitle: { fontSize: 14, color: colors.muted, marginTop: 2 },
+  tabsScroll: { flexGrow: 0 },
+  tabs: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  tabText: { fontSize: 15, fontWeight: '600', color: colors.text },
+  tabTextOn: { color: colors.primaryText },
+  badge: {
+    marginLeft: 6,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+  badgeAlert: { backgroundColor: colors.warning },
+  badgeOn: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  badgeText: { fontSize: 12, fontWeight: '700', color: colors.muted },
+  badgeTextOn: { color: colors.primaryText },
   list: { paddingHorizontal: 16, paddingBottom: 24 },
   separator: { height: 10 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },

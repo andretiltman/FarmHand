@@ -20,7 +20,7 @@ interface Props {
   onSyncNow: () => void;
 }
 
-/** Link FarmHand to Home Assistant so each plant and animal shows up there as a sensor. */
+/** Link FarmHand to Home Assistant so each plant, animal and maintenance task shows up there as a sensor. */
 export function HomeAssistantModal({ visible, onClose, items, config, status, onConnect, onDisconnect, onSyncNow }: Props) {
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
@@ -90,7 +90,7 @@ export function HomeAssistantModal({ visible, onClose, items, config, status, on
         ) : (
           <>
             <Text style={styles.help}>
-              Each plant and animal will appear in Home Assistant as a sensor you can put on a dashboard or use in
+              Each plant, animal and maintenance task will appear in Home Assistant as a sensor you can put on a dashboard or use in
               automations.
             </Text>
             <Text style={styles.label}>Home Assistant address</Text>

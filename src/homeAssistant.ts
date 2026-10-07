@@ -1,6 +1,6 @@
 import { findCrop } from './crops';
 import { growthStatus, transplantSuccess } from './growth';
-import { animalSummary, plantSummary } from './stats';
+import { animalSummary, plantSummary, taskSummary } from './stats';
 import { TrackedItem } from './types';
 
 /** Where to reach Home Assistant, and a long-lived access token (Profile → Security in HA). */
@@ -53,6 +53,7 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
   const sensors: HASensor[] = [];
   let plantsToWater = 0;
   let eggsToday = 0;
+  let tasksDue = 0;
 
   for (const item of items) {
     const entityId = ids.get(item.id)!;
@@ -95,6 +96,22 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
         // Watering-only plants (e.g. houseplants) report their watering status.
         sensors.push({ entityId, state: water.status, attributes: base });
       }
+    } else if (item.kind === 'task') {
+      const s = taskSummary(item, now);
+      if (s.status !== 'ok') tasksDue++;
+      sensors.push({
+        entityId,
+        state: s.status,
+        attributes: {
+          friendly_name: item.name,
+          icon: 'mdi:wrench-clock',
+          kind: 'task',
+          due: s.dueLabel,
+          days_until_due: s.daysUntilDue,
+          every_days: item.everyDays,
+          last_done: item.done[0] ?? null,
+        },
+      });
     } else {
       const s = animalSummary(item, now);
       eggsToday += s.today;
@@ -136,6 +153,16 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
         friendly_name: 'FarmHand eggs today',
         icon: 'mdi:egg',
         unit_of_measurement: 'eggs',
+        state_class: 'measurement',
+      },
+    },
+    {
+      entityId: 'sensor.farmhand_tasks_due',
+      state: tasksDue,
+      attributes: {
+        friendly_name: 'FarmHand maintenance tasks due',
+        icon: 'mdi:wrench-clock',
+        unit_of_measurement: 'tasks',
         state_class: 'measurement',
       },
     },

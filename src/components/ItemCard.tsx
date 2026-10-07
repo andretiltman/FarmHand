@@ -1,8 +1,9 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { findCrop } from '../crops';
+import { formatDays } from '../dates';
 import { growthStatus } from '../growth';
-import { animalSummary, plantSummary, WaterStatus } from '../stats';
+import { animalSummary, DueStatus, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
 import { TrackedItem } from '../types';
 import { TagList } from './TagPicker';
@@ -22,24 +23,25 @@ interface Props {
   onWater: () => void;
   onFeed: () => void;
   onEgg: () => void;
+  onDone: () => void;
 }
 
-const statusColor: Record<WaterStatus, string> = {
+const statusColor: Record<DueStatus, string> = {
   never: colors.warning,
   ok: colors.plant,
   due: colors.warning,
   overdue: colors.danger,
 };
 
-export function ItemCard({ item, onPress, onWater, onFeed, onEgg }: Props) {
-  const isPlant = item.kind === 'plant';
+export function ItemCard({ item, onPress, onWater, onFeed, onEgg, onDone }: Props) {
 
   let line1: string;
   let line2: string;
   /** Set when line 1 is a highlighted status rather than plain detail text. */
   let line1Color: string | null = null;
   let line2Color: string = colors.muted;
-  let icon = isPlant ? '🪴' : '🐔';
+  let icon = item.kind === 'plant' ? '🪴' : item.kind === 'animal' ? '🐔' : '🛠️';
+  const iconBackground = { plant: colors.plantSoft, animal: colors.animalSoft, task: colors.taskSoft }[item.kind];
   let actions: QuickAction[];
   if (item.kind === 'plant') {
     const s = plantSummary(item);
@@ -62,6 +64,21 @@ export function ItemCard({ item, onPress, onWater, onFeed, onEgg }: Props) {
         color: colors.water,
         soft: colors.waterSoft,
         onPress: onWater,
+      },
+    ];
+  } else if (item.kind === 'task') {
+    const s = taskSummary(item);
+    line1 = `${s.lastDoneLabel} · every ${item.everyDays === 1 ? 'day' : formatDays(item.everyDays)}`;
+    line2 = s.dueLabel;
+    line2Color = statusColor[s.status];
+    actions = [
+      {
+        emoji: '✓',
+        label: 'Done',
+        accessibilityLabel: `Mark ${item.name} as done`,
+        color: colors.task,
+        soft: colors.taskSoft,
+        onPress: onDone,
       },
     ];
   } else {
@@ -96,7 +113,7 @@ export function ItemCard({ item, onPress, onWater, onFeed, onEgg }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${item.name}, ${line1}, ${line2}`}
     >
-      <View style={[styles.icon, { backgroundColor: isPlant ? colors.plantSoft : colors.animalSoft }]}>
+      <View style={[styles.icon, { backgroundColor: iconBackground }]}>
         {item.kind === 'plant' && item.photos[0] ? (
           <Image source={{ uri: item.photos[0].uri }} style={styles.photo} accessibilityIgnoresInvertColors />
         ) : (

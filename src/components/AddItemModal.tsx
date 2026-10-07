@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CROPS, Crop, findCrop } from '../crops';
-import { addDays, approxDays, plural } from '../dates';
+import { addDays, approxDays, formatShortDate, plural } from '../dates';
 import { growthStatus } from '../growth';
 import { sowingAdvice } from '../seasons';
 import { colors, radius } from '../theme';
@@ -22,13 +22,29 @@ interface Props {
 
 type Step = 'kind' | 'crop' | 'details' | 'review';
 const PLANT_STEPS: Step[] = ['kind', 'crop', 'details', 'review'];
-const ANIMAL_STEPS: Step[] = ['kind', 'details', 'review'];
+const SHORT_STEPS: Step[] = ['kind', 'details', 'review'];
 
 /** Crop id for plants tracked for watering only. */
 const OTHER = 'other';
 
 const WATER_PRESETS = [1, 2, 3, 7, 14];
 const SPECIES_PRESETS = ['Chicken', 'Duck', 'Quail'];
+/** Common maintenance jobs and how often they're usually done. */
+const TASK_PRESETS: { name: string; everyDays: number }[] = [
+  { name: 'Septic tank bio enzymes', everyDays: 30 },
+  { name: 'Clean chicken coop', everyDays: 7 },
+  { name: 'Clean gutters', everyDays: 180 },
+  { name: 'Clean water tank', everyDays: 365 },
+  { name: 'Service lawnmower', everyDays: 180 },
+];
+const TASK_INTERVALS: { days: number; label: string }[] = [
+  { days: 7, label: 'Weekly' },
+  { days: 14, label: 'Fortnightly' },
+  { days: 30, label: 'Monthly' },
+  { days: 90, label: 'Every 3 months' },
+  { days: 180, label: 'Every 6 months' },
+  { days: 365, label: 'Yearly' },
+];
 
 export function AddItemModal({ visible, onClose, onSave }: Props) {
   const [step, setStep] = useState<Step>('kind');
@@ -42,6 +58,9 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [species, setSpecies] = useState('Chicken');
   const [headCount, setHeadCount] = useState(1);
+  const [everyDays, setEveryDays] = useState(30);
+  /** Days since the task was last done; null when it hasn't been done yet. */
+  const [lastDoneDaysAgo, setLastDoneDaysAgo] = useState<number | null>(null);
 
   // Start fresh every time the popup opens.
   useEffect(() => {
@@ -57,16 +76,19 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       setTags([]);
       setSpecies('Chicken');
       setHeadCount(1);
+      setEveryDays(30);
+      setLastDoneDaysAgo(null);
     }
   }, [visible]);
 
   const isPlant = kind === 'plant';
-  const accent = isPlant ? colors.plant : colors.animal;
+  const isTask = kind === 'task';
+  const accent = isPlant ? colors.plant : isTask ? colors.task : colors.animal;
   const crop = findCrop(cropId ?? undefined);
   const trimmedName = name.trim();
   const trimmedSpecies = species.trim() || 'Chicken';
 
-  const sequence = kind === 'animal' ? ANIMAL_STEPS : PLANT_STEPS;
+  const sequence = kind && kind !== 'plant' ? SHORT_STEPS : PLANT_STEPS;
   const stepIndex = sequence.indexOf(step);
   const go = (delta: 1 | -1) => setStep(sequence[stepIndex + delta]);
 
@@ -97,14 +119,24 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
     setStep('details');
   };
 
+  const lastDoneAt = lastDoneDaysAgo === null ? null : addDays(new Date(), -lastDoneDaysAgo);
+  const nextDue = lastDoneAt ? addDays(lastDoneAt, everyDays) : new Date();
+
   const save = () => {
     if (!kind || !trimmedName) return;
     onSave(
       kind === 'plant'
         ? { kind, name: trimmedName, waterEveryDays, growth, tags }
-        : { kind, name: trimmedName, species: trimmedSpecies, headCount },
+        : kind === 'animal'
+          ? { kind, name: trimmedName, species: trimmedSpecies, headCount }
+          : { kind, name: trimmedName, everyDays, done: lastDoneAt ? [lastDoneAt.toISOString()] : [] },
     );
     onClose();
+  };
+
+  const chooseTaskPreset = (p: { name: string; everyDays: number }) => {
+    setName(p.name);
+    setEveryDays(p.everyDays);
   };
 
   const titles: Record<Step, string> = {
@@ -114,7 +146,9 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       ? `Planting ${crop.name.toLowerCase()}`
       : isPlant
         ? 'Tell us about your plant'
-        : 'Tell us about your animals',
+        : isTask
+          ? 'Set up a maintenance task'
+          : 'Tell us about your animals',
     review: 'Looks good?',
   };
 
@@ -132,7 +166,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
     footer = (
       <>
         <Button label="Back" variant="secondary" onPress={() => go(-1)} />
-        <Button label={isPlant ? 'Add plant' : 'Add animals'} color={accent} onPress={save} />
+        <Button label={isPlant ? 'Add plant' : isTask ? 'Add task' : 'Add animals'} color={accent} onPress={save} />
       </>
     );
   }
@@ -164,6 +198,18 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
             color={colors.animal}
             soft={colors.animalSoft}
             onPress={() => chooseKind('animal')}
+          />
+        </View>
+      )}
+      {step === 'kind' && (
+        <View style={styles.kindRow}>
+          <KindOption
+            emoji="🛠️"
+            title="Maintenance"
+            description="Recurring jobs, like adding bio enzymes to the septic tank"
+            color={colors.task}
+            soft={colors.taskSoft}
+            onPress={() => chooseKind('task')}
           />
         </View>
       )}
@@ -207,10 +253,10 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder={isPlant ? 'e.g. Fern by the window' : 'e.g. The Girls'}
+            placeholder={isPlant ? 'e.g. Fern by the window' : isTask ? 'e.g. Septic tank bio enzymes' : 'e.g. The Girls'}
             placeholderTextColor={colors.muted}
             style={styles.input}
-            autoFocus={!crop}
+            autoFocus={!crop && !isTask}
             returnKeyType="next"
             onSubmitEditing={() => trimmedName && go(1)}
             maxLength={60}
@@ -275,7 +321,75 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
             </>
           )}
 
-          {isPlant ? (
+          {isTask && (
+            <>
+              <View style={styles.chips}>
+                {TASK_PRESETS.map((p) => (
+                  <Chip
+                    key={p.name}
+                    label={p.name}
+                    selected={trimmedName === p.name}
+                    color={colors.task}
+                    onPress={() => chooseTaskPreset(p)}
+                  />
+                ))}
+              </View>
+
+              <Text style={styles.label}>Repeat every</Text>
+              <Stepper
+                label="Repeat interval"
+                value={everyDays}
+                onChange={setEveryDays}
+                suffix={everyDays === 1 ? 'day' : 'days'}
+              />
+              <View style={styles.chips}>
+                {TASK_INTERVALS.map((t) => (
+                  <Chip
+                    key={t.days}
+                    label={t.label}
+                    selected={everyDays === t.days}
+                    color={colors.task}
+                    onPress={() => setEveryDays(t.days)}
+                  />
+                ))}
+              </View>
+
+              <Text style={styles.label}>When was it last done?</Text>
+              <View style={styles.chips}>
+                <Chip
+                  label="Not done yet"
+                  selected={lastDoneDaysAgo === null}
+                  color={colors.task}
+                  onPress={() => setLastDoneDaysAgo(null)}
+                />
+                <Chip
+                  label="Today"
+                  selected={lastDoneDaysAgo === 0}
+                  color={colors.task}
+                  onPress={() => setLastDoneDaysAgo(0)}
+                />
+                <Chip
+                  label="Earlier"
+                  selected={!!lastDoneDaysAgo}
+                  color={colors.task}
+                  onPress={() => setLastDoneDaysAgo(lastDoneDaysAgo || 7)}
+                />
+              </View>
+              {!!lastDoneDaysAgo && (
+                <View style={styles.spaced}>
+                  <Stepper
+                    label="Days since last done"
+                    value={lastDoneDaysAgo}
+                    onChange={setLastDoneDaysAgo}
+                    max={730}
+                    suffix="days ago"
+                  />
+                </View>
+              )}
+            </>
+          )}
+
+          {isTask ? null : isPlant ? (
             <>
               <Text style={styles.label}>Water every</Text>
               <Stepper
@@ -331,7 +445,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       {step === 'review' && (
         <ScrollView style={styles.shrink}>
           <View style={[styles.review, { borderColor: accent }]}>
-            <Text style={styles.reviewEmoji}>{isPlant ? (crop?.emoji ?? '🪴') : '🐔'}</Text>
+            <Text style={styles.reviewEmoji}>{isPlant ? (crop?.emoji ?? '🪴') : isTask ? '🛠️' : '🐔'}</Text>
             <Text style={styles.reviewName}>{trimmedName}</Text>
             <Text style={styles.reviewDetail}>
               {isPlant
@@ -343,8 +457,18 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                   ]
                     .filter(Boolean)
                     .join(' · ')
-                : `${headCount} × ${trimmedSpecies} · feeding & egg tracking`}
+                : isTask
+                  ? [
+                      `every ${plural(everyDays, 'day')}`,
+                      lastDoneAt ? `last done ${formatShortDate(lastDoneAt)}` : 'not done yet',
+                    ].join(' · ')
+                  : `${headCount} × ${trimmedSpecies} · feeding & egg tracking`}
             </Text>
+            {isTask && (
+              <Text style={[styles.reviewHeadline, { color: colors.task }]}>
+                {lastDoneAt && nextDue > new Date() ? `Next due ${formatShortDate(nextDue)}` : 'Due now'}
+              </Text>
+            )}
             {growth && (
               <>
                 <View style={styles.reviewJourney}>
@@ -461,7 +585,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   dots: { flexDirection: 'row', gap: 6, marginBottom: 20 },
   dot: { flex: 1, height: 4, borderRadius: 2 },
-  kindRow: { flexDirection: 'row', gap: 12, paddingBottom: 8 },
+  kindRow: { flexDirection: 'row', gap: 12, paddingBottom: 12 },
   kind: {
     flex: 1,
     borderWidth: 2,
