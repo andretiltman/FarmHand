@@ -1,8 +1,8 @@
 import { growthStatus } from './growth';
-import { animalSummary, plantSummary } from './stats';
+import { animalSummary, plantSummary, taskSummary } from './stats';
 import { TrackedItem } from './types';
 
-export type SectionKey = 'overview' | 'sown' | 'seedlings' | 'plants' | 'animals';
+export type SectionKey = 'overview' | 'sown' | 'seedlings' | 'plants' | 'animals' | 'maintenance';
 
 export interface Section {
   key: SectionKey;
@@ -14,9 +14,10 @@ export interface Section {
   includes: (item: TrackedItem, now: Date) => boolean;
 }
 
-/** True when the item needs watering, transplanting, feeding or harvesting. */
+/** True when the item needs watering, transplanting, feeding, harvesting or a maintenance task is due. */
 export function needsAttention(item: TrackedItem, now: Date = new Date()): boolean {
   if (item.kind === 'animal') return !animalSummary(item, now).fedToday;
+  if (item.kind === 'task') return taskSummary(item, now).status !== 'ok';
   const g = item.growth ? growthStatus(item.growth, now) : null;
   if (g?.stage === 'harvested') return false;
   if (g?.needsAction) return true;
@@ -33,7 +34,7 @@ export const sections: Section[] = [
     label: 'Overview',
     emoji: '⭐',
     emptyTitle: 'All caught up',
-    emptyText: 'Nothing needs watering, transplanting, feeding or harvesting right now.',
+    emptyText: 'Nothing needs watering, transplanting, feeding, harvesting or maintenance right now.',
     includes: needsAttention,
   },
   {
@@ -71,5 +72,13 @@ export const sections: Section[] = [
     emptyTitle: 'No animals yet',
     emptyText: 'Tap “Add” below to start tracking your chickens.',
     includes: (item) => item.kind === 'animal',
+  },
+  {
+    key: 'maintenance',
+    label: 'Maintenance',
+    emoji: '🛠️',
+    emptyTitle: 'No maintenance tasks',
+    emptyText: 'Tap “Add” below to set up a recurring job, like adding bio enzymes to the septic tank.',
+    includes: (item) => item.kind === 'task',
   },
 ];

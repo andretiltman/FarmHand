@@ -36,6 +36,8 @@ function HomeScreen() {
     waterPlant,
     logEggs,
     feedAnimal,
+    completeTask,
+    setTaskEvery,
     advanceStage,
     updateGrowth,
     addPhoto,
@@ -61,7 +63,8 @@ function HomeScreen() {
   const visible = bySection[sectionKey];
 
   const plantCount = items.filter((i) => i.kind === 'plant').length;
-  const animalCount = items.length - plantCount;
+  const animalCount = items.filter((i) => i.kind === 'animal').length;
+  const taskCount = items.filter((i) => i.kind === 'task').length;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -70,6 +73,7 @@ function HomeScreen() {
           <Text style={styles.title}>FarmHand</Text>
           <Text style={styles.subtitle}>
             {plantCount} plant{plantCount === 1 ? '' : 's'} · {animalCount} animal{animalCount === 1 ? '' : 's'}
+            {taskCount > 0 ? ` · ${taskCount} task${taskCount === 1 ? '' : 's'}` : ''}
           </Text>
         </View>
         <Pressable
@@ -140,6 +144,7 @@ function HomeScreen() {
               onWater={() => waterPlant(item.id)}
               onFeed={() => feedAnimal(item.id)}
               onEgg={() => logEggs(item.id, 1)}
+              onDone={() => completeTask(item.id)}
             />
           )}
           ListEmptyComponent={
@@ -147,7 +152,7 @@ function HomeScreen() {
               <View style={styles.empty}>
                 <Text style={styles.emptyEmoji}>🌱🐔</Text>
                 <Text style={styles.emptyTitle}>Nothing tracked yet</Text>
-                <Text style={styles.emptyText}>Tap “Add” below to start tracking a plant or your chickens.</Text>
+                <Text style={styles.emptyText}>Tap “Add” below to start tracking a plant, your chickens or a maintenance job.</Text>
               </View>
             ) : (
               <View style={styles.empty}>
@@ -165,7 +170,7 @@ function HomeScreen() {
           onPress={() => setAdding(true)}
           style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.8 }]}
           accessibilityRole="button"
-          accessibilityLabel="Add a plant or animal"
+          accessibilityLabel="Add a plant, animal or maintenance task"
         >
           <Text style={styles.addText}>＋ Add</Text>
         </Pressable>
@@ -188,6 +193,8 @@ function HomeScreen() {
         onWater={waterPlant}
         onLogEggs={logEggs}
         onFeed={feedAnimal}
+        onCompleteTask={completeTask}
+        onSetTaskEvery={setTaskEvery}
         onAdvance={advanceStage}
         onUpdateGrowth={updateGrowth}
         onAddPhoto={addPhoto}

@@ -10,6 +10,8 @@ export const colors = {
   plantSoft: '#E3F1E5',
   animal: '#C77D1A',
   animalSoft: '#FBEFD9',
+  task: '#6A5AA8',
+  taskSoft: '#ECE9F7',
   water: '#2F7BBF',
   waterSoft: '#E1EEF9',
   warning: '#C7861A',

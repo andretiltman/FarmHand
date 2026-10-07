@@ -1,6 +1,6 @@
 # FarmHand
 
-A simple mobile app for tracking your plants (their journey from seed to harvest, and how often you water them) and your chickens (when you last fed them and how many eggs they lay). Built with [Expo](https://expo.dev) / React Native, so it runs on iOS, Android and the web.
+A simple mobile app for tracking your plants (their journey from seed to harvest, and how often you water them), your chickens (when you last fed them and how many eggs they lay) and recurring maintenance jobs (like adding bio enzymes to the septic tank). Built with [Expo](https://expo.dev) / React Native, so it runs on iOS, Android and the web.
 
 ## Features
 
@@ -9,12 +9,14 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - Plants: when they were last watered and when they're next due (turns orange when due, red when overdue).
   - Animals: when they were last fed (orange until they've been fed today) and eggs collected today / over the last 7 days.
 - **Sections** – chips at the top of the list filter what you see, each with a count:
-  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, and animals not fed today. Shows *All caught up* when there's nothing to do.
+  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, animals not fed today, and maintenance tasks that are due. Shows *All caught up* when there's nothing to do.
   - 🌰 **Sown** – seeds that haven't sprouted yet.
   - 🌱 **Seedlings** – sprouted, waiting to be transplanted.
   - 🪴 **Plants** – growing, ready, harvested and watering-only plants.
   - 🐔 **Animals**.
-- **Quick actions** – tap 💧 **Water** on a plant, or 🌾 **Feed** / 🥚 **+1** on an animal, right from the list.
+  - 🛠️ **Maintenance** – recurring jobs.
+- **Maintenance tasks** – recurring jobs like *Septic tank bio enzymes* (monthly), *Clean gutters* or *Service lawnmower*. Pick a suggestion or type your own, choose how often it repeats (weekly to yearly, or any number of days), and say when it was last done so it doesn't start out overdue. Each shows when it's next due (orange when due, red when overdue).
+- **Quick actions** – tap 💧 **Water** on a plant, 🌾 **Feed** / 🥚 **+1** on an animal, or ✓ **Done** on a maintenance task, right from the list.
 - **Guided "Add" popup** – the **Add** button at the bottom opens a step-by-step popup:
   1. Choose **Plant** or **Animal**
   2. For plants, pick a crop (corn, tomato, strawberry, …) – each tile shows whether it's in season – or *Other plant / houseplant* for watering only
@@ -30,9 +32,9 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
 - **Photo log** – take or choose photos of each plant as it grows. Photos are labelled by age (*Day 23*), can be re-dated (handy for older photos from your library) or deleted, and the newest one becomes the plant's icon on the list.
 - **Tags** – mark plants as **GMO-free**, **Bush** or **Runner** (a plant can't be both bush and runner), or type your own like *Heirloom*. Tags show on the plant's card, can be changed in its details, and are sent to Home Assistant as a `tags` attribute.
 - **Seasons follow your hemisphere** – worked out from the phone's time zone, so October is spring in South Africa and autumn in Europe.
-- **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, change how often a plant needs watering, rename it (✏️ **Rename**), or delete it.
+- **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, change how often a plant needs watering or a task repeats, rename it (✏️ **Rename**), or delete it.
 - **Full screen on Android** – the system navigation bar is hidden while FarmHand is open; swipe up from the bottom edge to bring it back briefly.
-- **Home Assistant sensors** – tap 🏠 at the top, enter your Home Assistant address and a long-lived access token, and every plant and animal appears in Home Assistant as a sensor (see below).
+- **Home Assistant sensors** – tap 🏠 at the top, enter your Home Assistant address and a long-lived access token, and every plant, animal and maintenance task appears in Home Assistant as a sensor (see below).
 - Data is saved on the device (AsyncStorage), no account needed.
 
 ## Home Assistant
@@ -47,8 +49,10 @@ FarmHand then creates these sensors:
 | `sensor.farmhand_<crop name>` | growth stage: `seed`, `seedling`, `growing`, `ready`, `harvested` | `headline` (*Harvest in 12 days*), `needs_action`, `next_milestone`, `next_milestone_date`, `water_status`, `days_until_water_due`, `last_watered`, `tags` |
 | `sensor.farmhand_<plant name>` (watering only) | `never`, `ok`, `due`, `overdue` | `days_until_water_due`, `last_watered`, `water_every_days`, `tags` |
 | `sensor.farmhand_<animal name>` | eggs collected today | `eggs_last_7_days`, `eggs_total`, `fed_today`, `last_fed`, `head_count` |
+| `sensor.farmhand_<task name>` | `never`, `ok`, `due`, `overdue` | `due` (*Due in 23 days*), `days_until_due`, `every_days`, `last_done` |
 | `sensor.farmhand_plants_to_water` | number of plants due, overdue or never watered | |
 | `sensor.farmhand_eggs_today` | eggs collected today across all animals | |
+| `sensor.farmhand_tasks_due` | number of maintenance tasks due, overdue or never done | |
 
 Sensors are updated whenever you change something, when the app is opened, and every 15 minutes while it's open. Deleting an item removes its sensor, and **Disconnect** removes them all.
 
@@ -74,13 +78,13 @@ App.tsx                         Home screen: list + bottom Add button
 src/useItems.ts                 State + on-device persistence
 src/homeAssistant.ts            Home Assistant sensors and REST API calls
 src/useHomeAssistant.ts         Home Assistant connection and auto-sync
-src/types.ts                    Plant / animal data model
+src/types.ts                    Plant / animal / maintenance task data model
 src/crops.ts                    Crop catalog: sowing method, timings, growing guide
 src/seasons.ts                  Hemisphere-aware seasons and sowing advice
 src/growth.ts                   Seed → seedling → transplant → harvest stage logic
-src/stats.ts, src/dates.ts      Watering-due and egg-count calculations
-src/sections.ts                 Home screen sections (Overview / Sown / Seedlings / Plants / Animals)
-src/components/AddItemModal.tsx Guided add popup (plant or animal)
+src/stats.ts, src/dates.ts      Watering/task-due and egg-count calculations
+src/sections.ts                 Home screen sections (Overview / Sown / Seedlings / Plants / Animals / Maintenance)
+src/components/AddItemModal.tsx Guided add popup (plant, animal or maintenance task)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
 src/components/HomeAssistantModal.tsx  Connect to Home Assistant
 src/components/ItemCard.tsx     A row in the list

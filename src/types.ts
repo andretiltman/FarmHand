@@ -1,4 +1,4 @@
-export type ItemKind = 'plant' | 'animal';
+export type ItemKind = 'plant' | 'animal' | 'task';
 
 /** Sow straight into the ground, or start in a seed tray and transplant later. */
 export type SowMethod = 'direct' | 'transplant';
@@ -70,8 +70,21 @@ export interface AnimalItem {
   createdAt: string;
 }
 
-export type TrackedItem = PlantItem | AnimalItem;
+/** A recurring maintenance job, e.g. adding bio enzymes to the septic tank. */
+export interface TaskItem {
+  id: string;
+  kind: 'task';
+  name: string;
+  /** How often the task should be done, in days. */
+  everyDays: number;
+  /** ISO timestamps of each time it was done, newest first. */
+  done: string[];
+  createdAt: string;
+}
+
+export type TrackedItem = PlantItem | AnimalItem | TaskItem;
 
 export type NewItem =
   | Omit<PlantItem, 'id' | 'waterings' | 'photos' | 'createdAt'>
-  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'createdAt'>;
+  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'createdAt'>
+  | Omit<TaskItem, 'id' | 'createdAt'>;

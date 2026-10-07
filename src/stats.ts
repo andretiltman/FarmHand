@@ -1,42 +1,52 @@
 import { daysBetween, isSameDay, isWithinLastDays, relativeDay } from './dates';
-import { AnimalItem, PlantItem } from './types';
+import { AnimalItem, PlantItem, TaskItem } from './types';
 
-export type WaterStatus = 'never' | 'ok' | 'due' | 'overdue';
+/** How a recurring job (watering, a maintenance task) stands against its schedule. */
+export type DueStatus = 'never' | 'ok' | 'due' | 'overdue';
+export type WaterStatus = DueStatus;
 
-export interface PlantSummary {
-  status: WaterStatus;
+export interface DueSummary {
+  status: DueStatus;
   /** Positive = days until due, 0 = due today, negative = days overdue. */
   daysUntilDue: number | null;
-  lastWateredLabel: string;
   dueLabel: string;
+}
+
+/** Where a job done every `everyDays` stands, given when it was last done. */
+export function dueSummary(last: string | undefined, everyDays: number, now: Date = new Date()): DueSummary {
+  if (!last) return { status: 'never', daysUntilDue: null, dueLabel: 'Due now' };
+  const daysUntilDue = everyDays - daysBetween(new Date(last), now);
+  if (daysUntilDue === 0) return { status: 'due', daysUntilDue, dueLabel: 'Due today' };
+  if (daysUntilDue < 0) {
+    const n = -daysUntilDue;
+    return { status: 'overdue', daysUntilDue, dueLabel: `Overdue by ${n} day${n === 1 ? '' : 's'}` };
+  }
+  return { status: 'ok', daysUntilDue, dueLabel: daysUntilDue === 1 ? 'Due tomorrow' : `Due in ${daysUntilDue} days` };
+}
+
+export interface PlantSummary extends DueSummary {
+  lastWateredLabel: string;
 }
 
 export function plantSummary(plant: PlantItem, now: Date = new Date()): PlantSummary {
   const last = plant.waterings[0];
-  if (!last) {
-    return {
-      status: 'never',
-      daysUntilDue: null,
-      lastWateredLabel: 'Not watered yet',
-      dueLabel: 'Water now',
-    };
-  }
-  const daysUntilDue = plant.waterEveryDays - daysBetween(new Date(last), now);
-  let status: WaterStatus = 'ok';
-  let dueLabel = daysUntilDue === 1 ? 'Due tomorrow' : `Due in ${daysUntilDue} days`;
-  if (daysUntilDue === 0) {
-    status = 'due';
-    dueLabel = 'Due today';
-  } else if (daysUntilDue < 0) {
-    status = 'overdue';
-    const n = -daysUntilDue;
-    dueLabel = `Overdue by ${n} day${n === 1 ? '' : 's'}`;
-  }
+  const due = dueSummary(last, plant.waterEveryDays, now);
   return {
-    status,
-    daysUntilDue,
-    lastWateredLabel: `Watered ${relativeDay(last, now)}`,
-    dueLabel,
+    ...due,
+    dueLabel: last ? due.dueLabel : 'Water now',
+    lastWateredLabel: last ? `Watered ${relativeDay(last, now)}` : 'Not watered yet',
+  };
+}
+
+export interface TaskSummary extends DueSummary {
+  lastDoneLabel: string;
+}
+
+export function taskSummary(task: TaskItem, now: Date = new Date()): TaskSummary {
+  const last = task.done[0];
+  return {
+    ...dueSummary(last, task.everyDays, now),
+    lastDoneLabel: last ? `Done ${relativeDay(last, now)}` : 'Not done yet',
   };
 }
 

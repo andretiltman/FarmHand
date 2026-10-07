@@ -4,7 +4,7 @@ import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { findCrop } from '../crops';
 import { formatDateTime } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
-import { animalSummary, plantSummary } from '../stats';
+import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
 import { Growth, TrackedItem } from '../types';
 import { Button } from './Button';
@@ -23,6 +23,8 @@ interface Props {
   onWater: (id: string) => void;
   onLogEggs: (id: string, count: number) => void;
   onFeed: (id: string) => void;
+  onCompleteTask: (id: string) => void;
+  onSetTaskEvery: (id: string, days: number) => void;
   onAdvance: (id: string, action: StageAction) => void;
   onUpdateGrowth: (id: string, growth: Growth) => void;
   onAddPhoto: (id: string, pickedUri: string) => Promise<void>;
@@ -65,8 +67,8 @@ export function ItemDetailModal(props: Props) {
 
   let stats: { label: string; value: string }[];
   let history: { key: string; date: string; text: string; undoable: boolean }[];
-  let subtitle = isPlant ? 'Plant' : '';
-  let icon = isPlant ? '🪴' : '🐔';
+  let subtitle = isPlant ? 'Plant' : item.kind === 'task' ? 'Maintenance' : '';
+  let icon = isPlant ? '🪴' : item.kind === 'task' ? '🛠️' : '🐔';
   const growth = item.kind === 'plant' ? item.growth : undefined;
   const status = growth && growthStatus(growth);
   const crop = growth && findCrop(growth.cropId);
@@ -77,17 +79,7 @@ export function ItemDetailModal(props: Props) {
     const s = plantSummary(item);
     stats = [
       { label: 'Schedule', value: `Every ${item.waterEveryDays}d` },
-      {
-        label: 'Water due',
-        value:
-          s.daysUntilDue === null
-            ? 'Now'
-            : s.daysUntilDue === 0
-              ? 'Today'
-              : s.daysUntilDue > 0
-                ? `In ${s.daysUntilDue}d`
-                : `${-s.daysUntilDue}d late`,
-      },
+      { label: 'Water due', value: dueValue(s) },
       { label: 'Times watered', value: String(item.waterings.length) },
     ];
     history = item.waterings.map((d, i) => ({
@@ -114,6 +106,19 @@ export function ItemDetailModal(props: Props) {
       }
       history.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     }
+  } else if (item.kind === 'task') {
+    const s = taskSummary(item);
+    stats = [
+      { label: 'Schedule', value: `Every ${item.everyDays}d` },
+      { label: 'Due', value: dueValue(s) },
+      { label: 'Times done', value: String(item.done.length) },
+    ];
+    history = item.done.map((d, i) => ({
+      key: `done-${d}-${i}`,
+      date: d,
+      text: `✓  Done · ${formatDateTime(d)}`,
+      undoable: true,
+    }));
   } else {
     subtitle = `${item.headCount} × ${item.species}`;
     const s = animalSummary(item);
@@ -167,7 +172,9 @@ export function ItemDetailModal(props: Props) {
         <TextInput
           value={newName}
           onChangeText={setNewName}
-          placeholder={isPlant ? 'e.g. Cherry tomatoes by the fence' : 'e.g. The Girls'}
+          placeholder={
+            isPlant ? 'e.g. Cherry tomatoes by the fence' : item.kind === 'task' ? 'e.g. Septic tank enzymes' : 'e.g. The Girls'
+          }
           placeholderTextColor={colors.muted}
           style={styles.renameInput}
           autoFocus
@@ -249,7 +256,7 @@ export function ItemDetailModal(props: Props) {
               }}
             />
             <Button
-              label={`Delete ${isPlant ? 'plant' : 'animals'}`}
+              label={`Delete ${isPlant ? 'plant' : item.kind === 'task' ? 'task' : 'animals'}`}
               variant="danger"
               onPress={() => setConfirmDelete(true)}
             />
@@ -404,6 +411,18 @@ export function ItemDetailModal(props: Props) {
           </View>
         )}
 
+        {item.kind === 'task' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Repeat every</Text>
+            <Stepper
+              label="Repeat interval"
+              value={item.everyDays}
+              onChange={(days) => props.onSetTaskEvery(item.id, days)}
+              suffix={item.everyDays === 1 ? 'day' : 'days'}
+            />
+          </View>
+        )}
+
         <View style={styles.stats}>
           {stats.map((s) => (
             <View key={s.label} style={styles.stat}>
@@ -418,6 +437,10 @@ export function ItemDetailModal(props: Props) {
         {isPlant ? (
           <View style={styles.actionRow}>
             <Button label="💧  Watered now" color={colors.water} onPress={() => onWater(item.id)} />
+          </View>
+        ) : item.kind === 'task' ? (
+          <View style={styles.actionRow}>
+            <Button label="✓  Done now" color={colors.task} onPress={() => props.onCompleteTask(item.id)} />
           </View>
         ) : (
           <>
@@ -450,7 +473,13 @@ export function ItemDetailModal(props: Props) {
         </View>
         <View>
           {history.length === 0 ? (
-            <Text style={styles.empty}>{isPlant ? 'No waterings logged yet.' : 'No feedings or eggs logged yet.'}</Text>
+            <Text style={styles.empty}>
+              {isPlant
+                ? 'No waterings logged yet.'
+                : item.kind === 'task'
+                  ? 'Not done yet.'
+                  : 'No feedings or eggs logged yet.'}
+            </Text>
           ) : (
             history.map((h) => (
               <Text key={h.key} style={styles.historyItem}>
@@ -462,6 +491,13 @@ export function ItemDetailModal(props: Props) {
       </ScrollView>
     </Sheet>
   );
+}
+
+/** "Now", "Today", "In 3d" or "2d late". */
+function dueValue(s: DueSummary): string {
+  if (s.daysUntilDue === null) return 'Now';
+  if (s.daysUntilDue === 0) return 'Today';
+  return s.daysUntilDue > 0 ? `In ${s.daysUntilDue}d` : `${-s.daysUntilDue}d late`;
 }
 
 const STAGE_BUTTON: Record<StageAction, { label: string }> = {
