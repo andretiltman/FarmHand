@@ -61,6 +61,8 @@ export const CROPS: Crop[] = [
     guide: { sow: ['spring', 'summer'], depthMm: 25, spacingCm: { plant: 100, row: 200 }, germinationC: [22, 35] } },
   { id: 'lettuce', name: 'Lettuce', emoji: '🥬', recommended: 'direct', tip: 'Lettuce can be sown directly or started in trays – both work well.', daysToSeedling: 7, daysToTransplant: 28, daysToHarvest: 45, waterEveryDays: 2,
     guide: { sow: ['spring', 'autumn'], depthMm: 6, spacingCm: { plant: 25, row: 30 }, germinationC: [10, 24], note: 'Lettuce bolts in hot weather – give it afternoon shade in summer.' } },
+  { id: 'rocket', name: 'Rocket', emoji: '🥗', recommended: 'direct', tip: 'Rocket is fast and easy – sow it directly and pick leaves young.', daysToSeedling: 6, daysToTransplant: 21, daysToHarvest: 25, waterEveryDays: 2,
+    guide: { sow: ['autumn', 'winter', 'spring'], depthMm: 6, spacingCm: { plant: 15, row: 30 }, germinationC: [10, 25], note: 'Rocket bolts and turns peppery in hot weather – sow small batches every 2–3 weeks for a steady supply.' } },
   { id: 'tomato', name: 'Tomato', emoji: '🍅', recommended: 'transplant', tip: 'Start tomatoes in a seed tray and transplant when they are sturdy.', daysToSeedling: 8, daysToTransplant: 42, daysToHarvest: 70, waterEveryDays: 2,
     guide: { sow: ['spring', 'summer'], depthMm: 6, spacingCm: { plant: 50, row: 100 }, germinationC: [20, 30] } },
   { id: 'pepper', name: 'Pepper / Chilli', emoji: '🌶️', recommended: 'transplant', tip: 'Peppers are slow starters – begin them in a seed tray.', daysToSeedling: 12, daysToTransplant: 56, daysToHarvest: 75, waterEveryDays: 2,
