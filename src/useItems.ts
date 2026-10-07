@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { StageAction } from './growth';
-import { deletePhoto, savePhoto } from './photoStorage';
+import { deletePhoto, saveDataUrlPhoto, savePhoto } from './photoStorage';
+import { TransferPlant } from './transfer';
 import { Growth, NewItem, PlantItem, PlantPhoto, TrackedItem } from './types';
 
 const STORAGE_KEY = 'farmhand.items.v1';
@@ -86,6 +87,34 @@ export function useItems() {
       if (item?.kind === 'plant') item.photos.forEach((p) => deletePhoto(p.uri));
       return prev.filter((i) => i.id !== id);
     });
+  }, []);
+
+  /** Removes several items at once, e.g. plants that were sent to another phone. */
+  const removeItems = useCallback((ids: string[]) => {
+    setItems((prev) => {
+      prev.forEach((i) => {
+        if (ids.includes(i.id) && i.kind === 'plant') i.photos.forEach((p) => deletePhoto(p.uri));
+      });
+      return prev.filter((i) => !ids.includes(i.id));
+    });
+  }, []);
+
+  /** Adds plants received from another phone, with new ids so they never clash with plants already here. */
+  const importPlants = useCallback(async (plants: TransferPlant[]) => {
+    const added: PlantItem[] = [];
+    for (const plant of plants) {
+      const photos: PlantPhoto[] = [];
+      for (const photo of plant.photos) {
+        const photoId = makeId();
+        try {
+          photos.push({ id: photoId, uri: await saveDataUrlPhoto(photo.uri, photoId), takenAt: photo.takenAt });
+        } catch (e) {
+          console.warn('Skipping a photo that could not be saved', e);
+        }
+      }
+      added.push(migrate({ ...plant, id: makeId(), photos }) as PlantItem);
+    }
+    setItems((prev) => [...added, ...prev]);
   }, []);
 
   const renameItem = useCallback((id: string, name: string) => {
@@ -204,6 +233,8 @@ export function useItems() {
     loaded,
     addItem,
     removeItem,
+    removeItems,
+    importPlants,
     renameItem,
     setTags,
     setWaterEvery,
