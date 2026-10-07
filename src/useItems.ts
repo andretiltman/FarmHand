@@ -79,6 +79,10 @@ export function useItems() {
     });
   }, []);
 
+  const renameItem = useCallback((id: string, name: string) => {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, name } : i)));
+  }, []);
+
   const updatePlant = useCallback((id: string, update: (plant: PlantItem) => PlantItem) => {
     setItems((prev) => prev.map((i) => (i.id === id && i.kind === 'plant' ? update(i) : i)));
   }, []);
@@ -171,6 +175,7 @@ export function useItems() {
     loaded,
     addItem,
     removeItem,
+    renameItem,
     waterPlant,
     logEggs,
     feedAnimal,

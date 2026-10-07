@@ -1,3 +1,4 @@
+import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -15,6 +16,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
+      <NavigationBar hidden />
       <HomeScreen />
     </SafeAreaProvider>
   );
@@ -27,6 +29,7 @@ function HomeScreen() {
     loaded,
     addItem,
     removeItem,
+    renameItem,
     waterPlant,
     logEggs,
     feedAnimal,
@@ -130,6 +133,7 @@ function HomeScreen() {
         onSetPhotoDate={setPhotoDate}
         onRemovePhoto={removePhoto}
         onUndo={undoLast}
+        onRename={renameItem}
         onDelete={removeItem}
       />
     </View>
