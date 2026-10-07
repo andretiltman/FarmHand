@@ -77,6 +77,8 @@ export const CROPS: Crop[] = [
     guide: { sow: ['spring', 'summer'], depthMm: 6, spacingCm: { plant: 25, row: 40 }, germinationC: [20, 30] } },
   { id: 'strawberry', name: 'Strawberry', emoji: '🍓', recommended: 'transplant', tip: 'Strawberry seed is tiny and slow – start it in a seed tray and plant out once seedlings are sturdy.', daysToSeedling: 21, daysToTransplant: 84, daysToHarvest: 645, waterEveryDays: 2,
     guide: { sow: ['spring', 'summer'], depthMm: 3, spacingCm: { plant: 60, row: 120 }, germinationC: [18, 26], germinationDays: [7, 56], note: 'Cold stratification required: keep the seeds in the fridge for 3–4 weeks before sowing.' } },
+  { id: 'cannabis', name: 'Cannabis', emoji: '🌿', recommended: 'transplant', tip: 'Start in small pots and plant out after ~3 weeks. Outdoors it flowers as the days shorten, so plan to harvest in autumn.', daysToSeedling: 5, daysToTransplant: 21, daysToHarvest: 130, waterEveryDays: 2,
+    guide: { sow: ['spring'], depthMm: 10, spacingCm: { plant: 100, row: 150 }, germinationC: [20, 30], germinationDays: [3, 10], note: 'Only female plants produce buds – unless you use feminised seed, remove males once they show (around 4–6 weeks). Autoflowering varieties finish much faster (~10–12 weeks from seed).' } },
 ];
 
 export function findCrop(id: string | undefined): Crop | undefined {

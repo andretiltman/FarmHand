@@ -14,8 +14,8 @@ function formatGermination(crop: Crop): string {
   const range = crop.guide.germinationDays;
   if (!range) return `~${formatDays(crop.daysToSeedling)}`;
   const [min, max] = range;
-  const maxText = max % 7 === 0 && max >= 14 ? `${max / 7} weeks` : `${max} days`;
-  return `${formatDays(min)} to ${maxText}`;
+  if (max % 7 === 0 && max >= 14) return `${formatDays(min)} to ${max / 7} weeks`;
+  return `${min}–${max} days`;
 }
 
 interface Props {
@@ -56,7 +56,7 @@ export function CropGuide({ crop, method, showAdvice }: Props) {
             <Text style={styles.value}>{value}</Text>
           </View>
         ))}
-        {guide.note && <Text style={styles.note}>❄️ {guide.note}</Text>}
+        {guide.note && <Text style={styles.note}>📝 {guide.note}</Text>}
       </View>
     </View>
   );
