@@ -8,6 +8,12 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - Crops: their current stage and a countdown – *Seedling in 7 days*, *Transplant in 22 days*, *Harvest in 65 days* – turning orange when it's time to transplant or harvest.
   - Plants: when they were last watered and when they're next due (turns orange when due, red when overdue).
   - Animals: when they were last fed (orange until they've been fed today) and eggs collected today / over the last 7 days.
+- **Sections** – chips at the top of the list filter what you see, each with a count:
+  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, and animals not fed today. Shows *All caught up* when there's nothing to do.
+  - 🌰 **Sown** – seeds that haven't sprouted yet.
+  - 🌱 **Seedlings** – sprouted, waiting to be transplanted.
+  - 🪴 **Plants** – growing, ready, harvested and watering-only plants.
+  - 🐔 **Animals**.
 - **Quick actions** – tap 💧 **Water** on a plant, or 🌾 **Feed** / 🥚 **+1** on an animal, right from the list.
 - **Guided "Add" popup** – the **Add** button at the bottom opens a step-by-step popup:
   1. Choose **Plant** or **Animal**
@@ -73,6 +79,7 @@ src/crops.ts                    Crop catalog: sowing method, timings, growing gu
 src/seasons.ts                  Hemisphere-aware seasons and sowing advice
 src/growth.ts                   Seed → seedling → transplant → harvest stage logic
 src/stats.ts, src/dates.ts      Watering-due and egg-count calculations
+src/sections.ts                 Home screen sections (Overview / Sown / Seedlings / Plants / Animals)
 src/components/AddItemModal.tsx Guided add popup (plant or animal)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
 src/components/HomeAssistantModal.tsx  Connect to Home Assistant
