@@ -30,6 +30,7 @@ function HomeScreen() {
     addItem,
     removeItem,
     renameItem,
+    setTags,
     waterPlant,
     logEggs,
     feedAnimal,
@@ -134,6 +135,7 @@ function HomeScreen() {
         onRemovePhoto={removePhoto}
         onUndo={undoLast}
         onRename={renameItem}
+        onSetTags={setTags}
         onDelete={removeItem}
       />
     </View>

@@ -5,6 +5,7 @@ import { growthStatus } from '../growth';
 import { animalSummary, plantSummary, WaterStatus } from '../stats';
 import { colors, radius } from '../theme';
 import { TrackedItem } from '../types';
+import { TagList } from './TagPicker';
 
 interface QuickAction {
   emoji: string;
@@ -112,6 +113,7 @@ export function ItemCard({ item, onPress, onWater, onFeed, onEgg }: Props) {
         <Text style={[styles.status, { color: line2Color }]} numberOfLines={1}>
           {line2}
         </Text>
+        {item.kind === 'plant' && <TagList tags={item.tags} />}
       </View>
       {actions.map((a) => (
         <Pressable

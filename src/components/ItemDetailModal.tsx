@@ -15,6 +15,7 @@ import { PhotoLog } from './PhotoLog';
 import { PhotoViewer } from './PhotoViewer';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
+import { TagPicker } from './TagPicker';
 
 interface Props {
   item: TrackedItem | null;
@@ -29,6 +30,7 @@ interface Props {
   onRemovePhoto: (id: string, photoId: string) => void;
   onUndo: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  onSetTags: (id: string, tags: string[]) => void;
   onDelete: (id: string) => void;
 }
 
@@ -367,6 +369,13 @@ export function ItemDetailModal(props: Props) {
                 🪴 {success.transplanted} of {success.sown} seeds made it to transplanting ({success.percent}%)
               </Text>
             )}
+          </View>
+        )}
+
+        {item.kind === 'plant' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Tags</Text>
+            <TagPicker tags={item.tags} onChange={(tags) => props.onSetTags(item.id, tags)} />
           </View>
         )}
 

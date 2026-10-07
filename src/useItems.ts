@@ -9,7 +9,7 @@ const STORAGE_KEY = 'farmhand.items.v1';
 
 /** Fills in fields added after an item was first saved. */
 function migrate(item: TrackedItem): TrackedItem {
-  return item.kind === 'animal' ? { ...item, feedings: item.feedings ?? [] } : { ...item, photos: item.photos ?? [] };
+  return item.kind === 'animal' ? { ...item, feedings: item.feedings ?? [] } : { ...item, photos: item.photos ?? [], tags: item.tags ?? [] };
 }
 
 const STAGE_FIELD: Record<StageAction, 'sproutedAt' | 'transplantedAt' | 'harvestedAt'> = {
@@ -86,6 +86,11 @@ export function useItems() {
   const updatePlant = useCallback((id: string, update: (plant: PlantItem) => PlantItem) => {
     setItems((prev) => prev.map((i) => (i.id === id && i.kind === 'plant' ? update(i) : i)));
   }, []);
+
+  const setTags = useCallback(
+    (id: string, tags: string[]) => updatePlant(id, (p) => ({ ...p, tags })),
+    [updatePlant],
+  );
 
   /** Replaces a plant's growth record, e.g. after the user moves a milestone date. */
   const updateGrowth = useCallback(
@@ -176,6 +181,7 @@ export function useItems() {
     addItem,
     removeItem,
     renameItem,
+    setTags,
     waterPlant,
     logEggs,
     feedAnimal,

@@ -12,6 +12,7 @@ import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
+import { TagPicker } from './TagPicker';
 
 interface Props {
   visible: boolean;
@@ -38,6 +39,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
   const [method, setMethod] = useState<SowMethod>('direct');
   const [sownDaysAgo, setSownDaysAgo] = useState(0);
   const [seedsSown, setSeedsSown] = useState(1);
+  const [tags, setTags] = useState<string[]>([]);
   const [species, setSpecies] = useState('Chicken');
   const [headCount, setHeadCount] = useState(1);
 
@@ -52,6 +54,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       setMethod('direct');
       setSownDaysAgo(0);
       setSeedsSown(1);
+      setTags([]);
       setSpecies('Chicken');
       setHeadCount(1);
     }
@@ -98,7 +101,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
     if (!kind || !trimmedName) return;
     onSave(
       kind === 'plant'
-        ? { kind, name: trimmedName, waterEveryDays, growth }
+        ? { kind, name: trimmedName, waterEveryDays, growth, tags }
         : { kind, name: trimmedName, species: trimmedSpecies, headCount },
     );
     onClose();
@@ -292,6 +295,9 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                   />
                 ))}
               </View>
+
+              <Text style={styles.label}>Tags (optional)</Text>
+              <TagPicker tags={tags} onChange={setTags} />
             </>
           ) : (
             <>
@@ -333,6 +339,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                     growth && (growth.method === 'direct' ? 'Sown directly' : 'Started in a seed tray'),
                     growth && plural(seedsSown, 'seed'),
                     `water every ${plural(waterEveryDays, 'day')}`,
+                    ...tags,
                   ]
                     .filter(Boolean)
                     .join(' · ')
