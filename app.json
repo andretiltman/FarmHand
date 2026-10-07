@@ -23,6 +23,12 @@
     },
     "plugins": [
       [
+        "expo-navigation-bar",
+        {
+          "hidden": true
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "FarmHand uses your photos so you can add pictures of your plants as they grow.",

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { findCrop } from '../crops';
 import { formatDateTime } from '../dates';
@@ -28,11 +28,16 @@ interface Props {
   onSetPhotoDate: (id: string, photoId: string, takenAt: string) => void;
   onRemovePhoto: (id: string, photoId: string) => void;
   onUndo: (id: string) => void;
+  onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
 }
 
-/** What the popup is showing: the overview, a stage's date picker, or one photo. */
-type View_ = { kind: 'main' } | { kind: 'milestone'; key: MilestoneKey } | { kind: 'photo'; id: string };
+/** What the popup is showing: the overview, a stage's date picker, one photo, or the rename form. */
+type View_ =
+  | { kind: 'main' }
+  | { kind: 'milestone'; key: MilestoneKey }
+  | { kind: 'photo'; id: string }
+  | { kind: 'rename' };
 
 export function ItemDetailModal(props: Props) {
   const { item, onClose, onWater, onLogEggs, onFeed, onAdvance, onUndo, onDelete } = props;
@@ -40,6 +45,7 @@ export function ItemDetailModal(props: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [view, setView] = useState<View_>({ kind: 'main' });
+  const [newName, setNewName] = useState('');
   /** Seedlings to record when marking as transplanted; null means "all of them". */
   const [transplantCount, setTransplantCount] = useState<number | null>(null);
 
@@ -134,6 +140,43 @@ export function ItemDetailModal(props: Props) {
   const back = () => setView({ kind: 'main' });
   const photo = view.kind === 'photo' && item.kind === 'plant' ? item.photos.find((p) => p.id === view.id) : undefined;
 
+  if (view.kind === 'rename') {
+    const trimmed = newName.trim();
+    const save = () => {
+      if (!trimmed) return;
+      props.onRename(item.id, trimmed);
+      back();
+    };
+    return (
+      <Sheet
+        visible
+        onClose={onClose}
+        subtitle={subtitle}
+        title={`${icon}  ${item.name}`}
+        footer={
+          <>
+            <Button label="Cancel" variant="secondary" onPress={back} />
+            <Button label="Save" onPress={save} disabled={!trimmed} />
+          </>
+        }
+      >
+        <Text style={styles.renameLabel}>Name</Text>
+        <TextInput
+          value={newName}
+          onChangeText={setNewName}
+          placeholder={isPlant ? 'e.g. Cherry tomatoes by the fence' : 'e.g. The Girls'}
+          placeholderTextColor={colors.muted}
+          style={styles.renameInput}
+          autoFocus
+          selectTextOnFocus
+          returnKeyType="done"
+          onSubmitEditing={save}
+          maxLength={60}
+        />
+      </Sheet>
+    );
+  }
+
   if (view.kind === 'milestone' && growth) {
     return (
       <Sheet visible onClose={onClose} subtitle={subtitle} title={`${icon}  ${item.name}`}>
@@ -193,11 +236,21 @@ export function ItemDetailModal(props: Props) {
             />
           </>
         ) : (
-          <Button
-            label={`Delete ${isPlant ? 'plant' : 'animals'}`}
-            variant="danger"
-            onPress={() => setConfirmDelete(true)}
-          />
+          <>
+            <Button
+              label="✏️  Rename"
+              variant="secondary"
+              onPress={() => {
+                setNewName(item.name);
+                setView({ kind: 'rename' });
+              }}
+            />
+            <Button
+              label={`Delete ${isPlant ? 'plant' : 'animals'}`}
+              variant="danger"
+              onPress={() => setConfirmDelete(true)}
+            />
+          </>
         )
       }
     >
@@ -397,6 +450,17 @@ const STAGE_BUTTON: Record<StageAction, { label: string }> = {
 
 const styles = StyleSheet.create({
   body: { flexShrink: 1 },
+  renameLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  renameInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: colors.text,
+    backgroundColor: colors.background,
+  },
   growth: { marginBottom: 20 },
   journeyHint: { fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: 4 },
   section: { marginBottom: 20 },
