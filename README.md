@@ -24,7 +24,31 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
 - **Photo log** – take or choose photos of each plant as it grows. Photos are labelled by age (*Day 23*), can be re-dated (handy for older photos from your library) or deleted, and the newest one becomes the plant's icon on the list.
 - **Seasons follow your hemisphere** – worked out from the phone's time zone, so October is spring in South Africa and autumn in Europe.
 - **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, or delete it.
+- **Home Assistant sensors** – tap 🏠 at the top, enter your Home Assistant address and a long-lived access token, and every plant and animal appears in Home Assistant as a sensor (see below).
 - Data is saved on the device (AsyncStorage), no account needed.
+
+## Home Assistant
+
+1. In Home Assistant, open your profile → **Security** → **Long-lived access tokens** → **Create token**, and copy it.
+2. In FarmHand, tap 🏠, enter your Home Assistant address (e.g. `http://192.168.1.10:8123` – on Android use the IP address rather than `homeassistant.local`) and the token, then tap **Connect**.
+
+FarmHand then creates these sensors:
+
+| Entity | State | Useful attributes |
+| --- | --- | --- |
+| `sensor.farmhand_<crop name>` | growth stage: `seed`, `seedling`, `growing`, `ready`, `harvested` | `headline` (*Harvest in 12 days*), `needs_action`, `next_milestone`, `next_milestone_date`, `water_status`, `days_until_water_due`, `last_watered` |
+| `sensor.farmhand_<plant name>` (watering only) | `never`, `ok`, `due`, `overdue` | `days_until_water_due`, `last_watered`, `water_every_days` |
+| `sensor.farmhand_<animal name>` | eggs collected today | `eggs_last_7_days`, `eggs_total`, `fed_today`, `last_fed`, `head_count` |
+| `sensor.farmhand_plants_to_water` | number of plants due, overdue or never watered | |
+| `sensor.farmhand_eggs_today` | eggs collected today across all animals | |
+
+Sensors are updated whenever you change something, when the app is opened, and every 15 minutes while it's open. Deleting an item removes its sensor, and **Disconnect** removes them all.
+
+Good to know:
+
+- FarmHand pushes the sensors from your phone, so they only update while the app is open. Home Assistant also forgets them when it restarts, until FarmHand next syncs.
+- When using the web version, add the page's address to `cors_allowed_origins` under `http:` in Home Assistant's `configuration.yaml`.
+- A standalone Android/iOS build talking to Home Assistant over plain `http://` needs cleartext traffic allowed (Expo Go already allows it); using an `https://` address (e.g. Nabu Casa) avoids this.
 
 ## Running it
 
@@ -40,6 +64,8 @@ Or run `npm run android`, `npm run ios`, or `npm run web`.
 ```
 App.tsx                         Home screen: list + bottom Add button
 src/useItems.ts                 State + on-device persistence
+src/homeAssistant.ts            Home Assistant sensors and REST API calls
+src/useHomeAssistant.ts         Home Assistant connection and auto-sync
 src/types.ts                    Plant / animal data model
 src/crops.ts                    Crop catalog: sowing method, timings, growing guide
 src/seasons.ts                  Hemisphere-aware seasons and sowing advice
@@ -47,6 +73,7 @@ src/growth.ts                   Seed → seedling → transplant → harvest sta
 src/stats.ts, src/dates.ts      Watering-due and egg-count calculations
 src/components/AddItemModal.tsx Guided add popup (plant or animal)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
+src/components/HomeAssistantModal.tsx  Connect to Home Assistant
 src/components/ItemCard.tsx     A row in the list
 src/components/Journey.tsx      Growth timeline
 src/components/CropGuide.tsx    Growing guide card
