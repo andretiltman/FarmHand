@@ -7,11 +7,14 @@ import { newId } from './ids';
 import { deletePhoto, saveDataUrlPhoto, savePhoto } from './photoStorage';
 import { Deleted, markRemoved, mergeSnapshot, MergeResult, removedKey, stamp, SyncSnapshot } from './sync';
 import { TransferPlant } from './transfer';
-import { AnimalItem, CareKind, Growth, NewItem, PlantItem, PlantPhoto, TaskItem, TrackedItem } from './types';
+import { AnimalItem, CareKind, CareLog, Growth, NewItem, PlantItem, PlantPhoto, TaskItem, TrackedItem } from './types';
 
 const STORAGE_KEY = 'farmhand.items.v1';
 /** Ids of deleted items, so syncing with another phone doesn't bring them back. */
 const DELETED_KEY = 'farmhand.deleted.v1';
+
+const careLogs = (logs: (CareLog | string)[] | undefined): CareLog[] =>
+  (logs ?? []).map((l) => (typeof l === 'string' ? { date: l } : l));
 
 /** Fills in fields added after an item was first saved. */
 function migrate(item: TrackedItem): TrackedItem {
@@ -24,10 +27,12 @@ function migrate(item: TrackedItem): TrackedItem {
         careEvery: item.careEvery ?? {},
         tracksEggs: item.tracksEggs ?? true,
         eggs: item.eggs ?? [],
-        feedings: item.feedings ?? [],
-        walks: item.walks ?? [],
-        groomings: item.groomings ?? [],
-        rides: item.rides ?? [],
+        names: item.names ?? [],
+        // Care used to be logged as bare timestamps.
+        feedings: careLogs(item.feedings),
+        walks: careLogs(item.walks),
+        groomings: careLogs(item.groomings),
+        rides: careLogs(item.rides),
       };
     case 'plant':
       return { ...item, waterings: item.waterings ?? [], photos: item.photos ?? [], tags: item.tags ?? [] };
@@ -65,7 +70,7 @@ function undoAnimal(animal: AnimalItem): AnimalItem {
   const lastEgg = animal.eggs[0]?.date ?? '';
   let newest: { date: string; field: CareJob['field'] } | null = null;
   for (const { field } of Object.values(CARE)) {
-    const date = animal[field][0];
+    const date = animal[field][0]?.date;
     if (date && (!newest || date > newest.date)) newest = { date, field };
   }
   if (!lastEgg && !newest) return animal;
@@ -320,12 +325,15 @@ export function useItems() {
     [updateAnimal],
   );
 
-  /** Logs a feeding, walk, grooming or ride as of now. */
+  /** Logs a feeding, walk, grooming or ride as of now – for `who` of the named animals, or all of them. */
   const logCare = useCallback(
-    (id: string, kind: CareKind) => {
-      const now = new Date().toISOString();
+    (id: string, kind: CareKind, who?: string[]) => {
       const { field } = CARE[kind];
-      updateAnimal(id, (a) => ({ ...a, [field]: [now, ...a[field]] }));
+      updateAnimal(id, (a) => {
+        const log: CareLog = { date: new Date().toISOString() };
+        if (who && a.names.some((n) => !who.includes(n))) log.who = who;
+        return { ...a, [field]: [log, ...a[field]] };
+      });
     },
     [updateAnimal],
   );
@@ -334,6 +342,15 @@ export function useItems() {
   const setCare = useCallback(
     (id: string, care: CareKind[], tracksEggs: boolean) =>
       updateAnimal(id, (a) => stamp({ ...a, care, tracksEggs }, 'care', 'tracksEggs')),
+    [updateAnimal],
+  );
+
+  /** Names the animals; the head count follows the number of names. */
+  const setNames = useCallback(
+    (id: string, names: string[]) =>
+      updateAnimal(id, (a) =>
+        stamp({ ...a, names, headCount: names.length || a.headCount }, 'names', 'headCount'),
+      ),
     [updateAnimal],
   );
 
@@ -380,6 +397,7 @@ export function useItems() {
     logCare,
     setCare,
     setCareEvery,
+    setNames,
     completeTask,
     setTaskEvery,
     advanceStage,

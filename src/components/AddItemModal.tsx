@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { CARE, findSpecies, SPECIES_PRESETS, SpeciesPreset, speciesEmoji } from '../care';
+import { CARE, findSpecies, joinNames, SPECIES_PRESETS, SpeciesPreset, speciesEmoji } from '../care';
 import { CROPS, Crop, findCrop } from '../crops';
 import { addDays, approxDays, formatShortDate, plural } from '../dates';
 import { growthStatus } from '../growth';
@@ -12,6 +12,7 @@ import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
+import { NamesEditor } from './NamePicker';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
 import { TagPicker } from './TagPicker';
@@ -59,6 +60,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [species, setSpecies] = useState('Chicken');
   const [headCount, setHeadCount] = useState(1);
+  const [names, setNames] = useState<string[]>([]);
   const [care, setCare] = useState<CareKind[]>(SPECIES_PRESETS[0].care);
   const [careEvery, setCareEvery] = useState<Partial<Record<CareKind, number>>>({});
   const [tracksEggs, setTracksEggs] = useState(true);
@@ -80,6 +82,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       setTags([]);
       setSpecies('Chicken');
       setHeadCount(1);
+      setNames([]);
       chooseSpecies(SPECIES_PRESETS[0]);
       setEveryDays(30);
       setLastDoneDaysAgo(null);
@@ -141,7 +144,16 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       kind === 'plant'
         ? { kind, name: trimmedName, waterEveryDays, growth, tags }
         : kind === 'animal'
-          ? { kind, name: trimmedName, species: trimmedSpecies, headCount, care, careEvery, tracksEggs }
+          ? {
+              kind,
+              name: trimmedName,
+              species: trimmedSpecies,
+              headCount: names.length || headCount,
+              names,
+              care,
+              careEvery,
+              tracksEggs,
+            }
           : { kind, name: trimmedName, everyDays, done: lastDoneAt ? [lastDoneAt.toISOString()] : [] },
     );
     onClose();
@@ -454,8 +466,17 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                 style={[styles.input, styles.spaced]}
                 maxLength={30}
               />
-              <Text style={styles.label}>How many?</Text>
-              <Stepper label="Number of animals" value={headCount} onChange={setHeadCount} max={999} />
+              <Text style={styles.label}>Names (optional)</Text>
+              <NamesEditor names={names} onChange={setNames} />
+              {names.length > 1 && (
+                <Text style={styles.hint}>When you log a feed, walk, … you can tick which of them it was for.</Text>
+              )}
+              {names.length === 0 && (
+                <>
+                  <Text style={styles.label}>How many?</Text>
+                  <Stepper label="Number of animals" value={headCount} onChange={setHeadCount} max={999} />
+                </>
+              )}
               <Text style={styles.label}>What do they need?</Text>
               <CarePicker
                 care={care}
@@ -495,7 +516,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                       lastDoneAt ? `last done ${formatShortDate(lastDoneAt)}` : 'not done yet',
                     ].join(' · ')
                   : [
-                      `${headCount} × ${trimmedSpecies}`,
+                      names.length ? `${trimmedSpecies}: ${joinNames(names)}` : `${headCount} × ${trimmedSpecies}`,
                       ...care.map(
                         (k) => `${CARE[k].verb.toLowerCase()} every ${plural(careEvery[k] ?? CARE[k].everyDays, 'day')}`,
                       ),
@@ -679,6 +700,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   spaced: { marginTop: 10 },
+  hint: { fontSize: 13, color: colors.muted, marginTop: 6 },
   method: {
     flexDirection: 'row',
     gap: 12,

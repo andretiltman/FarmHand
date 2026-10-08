@@ -68,7 +68,7 @@ export function animalSummary(animal: AnimalItem, now: Date = new Date()): Anima
     if (isSameDay(log.date, now)) today += log.count;
     if (isWithinLastDays(log.date, 7, now)) last7Days += log.count;
   }
-  const lastFed = animal.feedings[0];
+  const lastFed = animal.feedings[0]?.date;
   return {
     today,
     last7Days,

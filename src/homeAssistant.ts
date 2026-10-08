@@ -131,9 +131,10 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
         kind: 'animal',
         species: item.species,
         head_count: item.headCount,
+        names: item.names.join(', '),
         needs_care: due.map((c) => c.kind).join(', '),
         fed_today: s.fedToday,
-        last_fed: item.feedings[0] ?? null,
+        last_fed: item.feedings[0]?.date ?? null,
         ...careAttributes,
       };
       if (item.tracksEggs) {

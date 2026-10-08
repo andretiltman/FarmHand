@@ -1,6 +1,6 @@
 import { relativeDay } from './dates';
 import { dueSummary, DueSummary } from './stats';
-import { AnimalItem, CareKind } from './types';
+import { AnimalItem, CareKind, CareLog } from './types';
 
 /** The jobs an animal can need, in the order they're shown. */
 export const CARE_KINDS: CareKind[] = ['feed', 'walk', 'groom', 'ride'];
@@ -59,22 +59,56 @@ export function careEvery(animal: Pick<AnimalItem, 'careEvery'>, kind: CareKind)
 export interface CareStatus extends DueSummary {
   kind: CareKind;
   job: CareJob;
+  /** When every animal had last had it done – for named animals, the one waiting longest. */
   last?: string;
-  /** "Fed today", "Not walked yet". */
+  /** "Fed today", "Not walked yet", or "Walk Harley" when only some named animals are due. */
   lastLabel: string;
+  /** Named animals the job is due for (all of them when it's due for everyone). */
+  dueFor: string[];
 }
 
-/** Where each of the animal's jobs stands, in display order. */
+/** Whether a log entry included this named animal. */
+export const includes = (log: CareLog, name: string) => !log.who || log.who.includes(name);
+
+/** Where each of the animal's jobs stands, in display order. Named animals are tracked one by one. */
 export function careStatuses(animal: AnimalItem, now: Date = new Date()): CareStatus[] {
   return CARE_KINDS.filter((k) => animal.care.includes(k)).map((kind) => {
     const job = CARE[kind];
-    const last = animal[job.field][0];
+    const every = careEvery(animal, kind);
+    const logs = animal[job.field];
+    let last: string | undefined;
+    let dueFor: string[] = [];
+    if (animal.names.length > 1) {
+      const lastFor = animal.names.map((name) => ({ name, last: logs.find((l) => includes(l, name))?.date }));
+      last = lastFor.some((n) => !n.last) ? undefined : lastFor.map((n) => n.last!).sort()[0];
+      dueFor = lastFor.filter((n) => dueSummary(n.last, every, now).status !== 'ok').map((n) => n.name);
+    } else {
+      last = logs[0]?.date;
+    }
+    const due = dueSummary(last, every, now);
     return {
       kind,
       job,
       last,
-      lastLabel: last ? `${job.past} ${relativeDay(last, now)}` : `Not ${job.past.toLowerCase()} yet`,
-      ...dueSummary(last, careEvery(animal, kind), now),
+      lastLabel:
+        dueFor.length && dueFor.length < animal.names.length
+          ? `${job.verb} ${joinNames(dueFor)}`
+          : last
+            ? `${job.past} ${relativeDay(last, now)}`
+            : `Not ${job.past.toLowerCase()} yet`,
+      dueFor: due.status === 'ok' ? [] : dueFor,
+      ...due,
     };
   });
+}
+
+/** "Annie", "Annie and Harley", "Annie, Harley and Max". */
+export function joinNames(names: string[]): string {
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** "Fed", "Fed all" or "Walked Annie and Harley". */
+export function careLogText(job: CareJob, log: CareLog, names: string[]): string {
+  if (log.who) return `${job.past} ${joinNames(log.who)}`;
+  return names.length > 1 ? `${job.past} all` : job.past;
 }

@@ -17,11 +17,12 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - 🛠️ **Maintenance** – recurring jobs.
 - **Maintenance tasks** – recurring jobs like *Septic tank bio enzymes* (monthly), *Clean gutters* or *Service lawnmower*. Pick a suggestion or type your own, choose how often it repeats (weekly to yearly, or any number of days), and say when it was last done so it doesn't start out overdue. Each shows when it's next due (orange when due, red when overdue).
 - **Animal care** – each animal tracks the jobs it needs: 🌾 **Feed**, 🐾 **Walk**, 🧼 **Groom** and 🏇 **Ride**, plus 🥚 **Eggs** for laying birds. Picking a type fills in the usual ones – chickens, ducks and quail: feed daily and collect eggs; dogs: feed and walk daily, groom weekly; horses: feed and groom daily, ride every 2 days – and you can turn jobs on or off and change how often each is due, when adding the animal or later in its details.
+- **Named animals** – give a group of animals names (e.g. *Annie* and *Harley*), when adding them or later in their details. Tapping Feed, Walk, … then asks which of them it was for, with ticks for the ones that are due (or everyone) already set, and the history reads *Fed all* or *Walked Annie and Harley*. Each named animal is tracked on its own, so the dogs stay due until both have been walked – the card then says e.g. *🐾 Walk Harley*.
 - **Quick actions** – tap 💧 **Water** on a plant, ✓ **Done** on a maintenance task, or a care job (🌾 **Feed**, 🐾 **Walk**, …) / 🥚 **+1** on an animal, right from the list. Animals show two buttons, with whatever's due first; every job has a button in the details popup.
 - **Guided "Add" popup** – the **Add** button at the bottom opens a step-by-step popup:
   1. Choose **Plant** or **Animal**
   2. For plants, pick a crop (corn, tomato, strawberry, …) – each tile shows whether it's in season – or *Other plant / houseplant* for watering only
-  3. Enter details – for animals, pick a type (🐔 Chicken, 🦆 Duck, 🐦 Quail, 🐕 Dog, 🐴 Horse, or type your own), how many, and what they need and how often; for crops, a **growing guide** (sowing season with a *good time to sow?* check, depth, spacing, germination temperature and time, time to harvest, special notes like cold stratification), then choose **sow directly in the ground** or **start in a seed tray and transplant**, with the recommended method pre-selected (e.g. direct sowing for corn, a seed tray for tomatoes)
+  3. Enter details – for animals, pick a type (🐔 Chicken, 🦆 Duck, 🐦 Quail, 🐕 Dog, 🐴 Horse, or type your own), how many or their names, and what they need and how often; for crops, a **growing guide** (sowing season with a *good time to sow?* check, depth, spacing, germination temperature and time, time to harvest, special notes like cold stratification), then choose **sow directly in the ground** or **start in a seed tray and transplant**, with the recommended method pre-selected (e.g. direct sowing for corn, a seed tray for tomatoes)
   4. Review the estimated timeline and save
 - **Seed → Seedling → (Transplant) → Harvest** – each crop follows its journey:
   - After sowing, it counts down to the seedling stage, which starts automatically (or tap *It has sprouted* if it's early).
@@ -53,7 +54,7 @@ FarmHand then creates these sensors:
 | --- | --- | --- |
 | `sensor.farmhand_<crop name>` | growth stage: `seed`, `seedling`, `growing`, `ready`, `harvested` | `headline` (*Harvest in 12 days*), `needs_action`, `next_milestone`, `next_milestone_date`, `water_status`, `days_until_water_due`, `last_watered`, `tags` |
 | `sensor.farmhand_<plant name>` (watering only) | `never`, `ok`, `due`, `overdue` | `days_until_water_due`, `last_watered`, `water_every_days`, `tags` |
-| `sensor.farmhand_<animal name>` (laying birds) | eggs collected today | `eggs_last_7_days`, `eggs_total`, `needs_care`, `fed_today`, `last_fed`, `head_count`, and for each job `<job>_status`, `last_<fed/walked/groomed/ridden>`, `<job>_every_days` |
+| `sensor.farmhand_<animal name>` (laying birds) | eggs collected today | `eggs_last_7_days`, `eggs_total`, `needs_care`, `fed_today`, `last_fed`, `head_count`, `names`, and for each job `<job>_status`, `last_<fed/walked/groomed/ridden>`, `<job>_every_days` |
 | `sensor.farmhand_<animal name>` (other animals) | most pressing job: `never`, `ok`, `due`, `overdue` | `needs_care` (e.g. `walk, groom`), plus the same per-job attributes |
 | `sensor.farmhand_<task name>` | `never`, `ok`, `due`, `overdue` | `due` (*Due in 23 days*), `days_until_due`, `every_days`, `last_done` |
 | `sensor.farmhand_plants_to_water` | number of plants due, overdue or never watered | |
@@ -103,6 +104,7 @@ src/ids.ts, src/device.ts       Item GUIDs and this phone's id
 src/transferFile(.web).ts       Share sheet and file picker for transfer files
 src/components/ItemCard.tsx     A row in the list
 src/components/CarePicker.tsx   Choose an animal's care jobs and how often
+src/components/NamePicker.tsx   Animal names, and ticking which ones a feed/walk/… was for
 src/components/Journey.tsx      Growth timeline
 src/components/CropGuide.tsx    Growing guide card
 src/components/Calendar.tsx     Date picker

@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { CARE, careStatuses, speciesEmoji } from '../care';
+import { CARE, careLogText, careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
 import { formatDateTime, relativeDay } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
 import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
-import { CareKind, Growth, TrackedItem } from '../types';
+import { AnimalItem, CareKind, Growth, TrackedItem } from '../types';
 import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { MilestoneEditor } from './MilestoneEditor';
+import { NamesEditor, WhoPicker } from './NamePicker';
 import { PhotoLog } from './PhotoLog';
 import { PhotoViewer } from './PhotoViewer';
 import { Sheet } from './Sheet';
@@ -24,7 +25,11 @@ interface Props {
   onClose: () => void;
   onWater: (id: string) => void;
   onLogEggs: (id: string, count: number) => void;
-  onCare: (id: string, kind: CareKind) => void;
+  /** `who`: which of the named animals it was for (all when absent). */
+  onCare: (id: string, kind: CareKind, who?: string[]) => void;
+  /** Opens straight onto "who did you feed?" (from a card's quick button). */
+  startCare?: CareKind | null;
+  onSetNames: (id: string, names: string[]) => void;
   onSetCare: (id: string, care: CareKind[], tracksEggs: boolean) => void;
   onSetCareEvery: (id: string, kind: CareKind, days: number) => void;
   onCompleteTask: (id: string) => void;
@@ -46,10 +51,11 @@ type View_ =
   | { kind: 'main' }
   | { kind: 'milestone'; key: MilestoneKey }
   | { kind: 'photo'; id: string }
-  | { kind: 'rename' };
+  | { kind: 'rename' }
+  | { kind: 'care'; care: CareKind; who: string[]; fromCard: boolean };
 
 export function ItemDetailModal(props: Props) {
-  const { item, onClose, onWater, onLogEggs, onCare, onAdvance, onUndo, onDelete } = props;
+  const { item, onClose, onWater, onLogEggs, onCare, onAdvance, onUndo, onDelete, startCare } = props;
   const [eggCount, setEggCount] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -62,9 +68,13 @@ export function ItemDetailModal(props: Props) {
     setEggCount(1);
     setConfirmDelete(false);
     setShowGuide(false);
-    setView({ kind: 'main' });
+    setView(
+      startCare && item?.kind === 'animal'
+        ? { kind: 'care', care: startCare, who: whoToTick(item, startCare), fromCard: true }
+        : { kind: 'main' },
+    );
     setTransplantCount(null);
-  }, [item?.id]);
+  }, [item?.id, startCare]);
 
   if (!item) return null;
   const isPlant = item.kind === 'plant';
@@ -146,10 +156,10 @@ export function ItemDetailModal(props: Props) {
         undoable: true,
       })),
       ...Object.values(CARE).flatMap((job) =>
-        item[job.field].map((d, i) => ({
-          key: `${job.field}-${d}-${i}`,
-          date: d,
-          text: `${job.emoji}  ${job.past} · ${formatDateTime(d)}`,
+        item[job.field].map((l, i) => ({
+          key: `${job.field}-${l.date}-${i}`,
+          date: l.date,
+          text: `${job.emoji}  ${careLogText(job, l, item.names)} · ${formatDateTime(l.date)}`,
           undoable: true,
         })),
       ),
@@ -194,6 +204,38 @@ export function ItemDetailModal(props: Props) {
           onSubmitEditing={save}
           maxLength={60}
         />
+      </Sheet>
+    );
+  }
+
+  if (view.kind === 'care' && item.kind === 'animal') {
+    const job = CARE[view.care];
+    const done = () => (view.fromCard ? onClose() : back());
+    return (
+      <Sheet
+        visible
+        onClose={onClose}
+        subtitle={subtitle}
+        title={`${icon}  ${item.name}`}
+        footer={
+          <>
+            <Button label="Cancel" variant="secondary" onPress={done} />
+            <Button
+              label={`${job.emoji}  ${job.verb}`}
+              color={colors.plant}
+              disabled={view.who.length === 0}
+              onPress={() => {
+                onCare(item.id, view.care, view.who);
+                done();
+              }}
+            />
+          </>
+        }
+      >
+        <ScrollView style={styles.body}>
+          <Text style={styles.sectionTitle}>Who did you {job.verb.toLowerCase()}?</Text>
+          <WhoPicker job={job} names={item.names} who={view.who} onChange={(who) => setView({ ...view, who })} />
+        </ScrollView>
       </Sheet>
     );
   }
@@ -424,7 +466,9 @@ export function ItemDetailModal(props: Props) {
 
         {item.kind === 'animal' && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Looking after</Text>
+            <Text style={styles.sectionTitle}>Names</Text>
+            <NamesEditor names={item.names} onChange={(names) => props.onSetNames(item.id, names)} />
+            <Text style={[styles.sectionTitle, styles.spacedTitle]}>Looking after</Text>
             <CarePicker
               care={item.care}
               careEvery={item.careEvery}
@@ -487,7 +531,11 @@ export function ItemDetailModal(props: Props) {
                     key={c.kind}
                     label={item.care.length === 1 ? `${c.job.emoji}  ${c.job.past} now` : `${c.job.emoji} ${c.job.verb}`}
                     color={colors.plant}
-                    onPress={() => onCare(item.id, c.kind)}
+                    onPress={() =>
+                      item.names.length > 1
+                        ? setView({ kind: 'care', care: c.kind, who: whoToTick(item, c.kind), fromCard: false })
+                        : onCare(item.id, c.kind)
+                    }
                   />
                 ))}
               </View>
@@ -540,6 +588,12 @@ export function ItemDetailModal(props: Props) {
   );
 }
 
+/** Ticks the animals the job is due for, or everyone when it isn't due for anyone in particular. */
+function whoToTick(animal: AnimalItem, kind: CareKind): string[] {
+  const dueFor = careStatuses(animal).find((c) => c.kind === kind)?.dueFor ?? [];
+  return dueFor.length ? dueFor : animal.names;
+}
+
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /** "Now", "Today", "In 3d" or "2d late". */
@@ -572,6 +626,7 @@ const styles = StyleSheet.create({
   journeyHint: { fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: 4 },
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 8 },
+  spacedTitle: { marginTop: 20 },
   seedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   seedLabel: { fontSize: 14, color: colors.text },
   successLine: { fontSize: 14, fontWeight: '600', color: colors.plant, marginTop: 4 },

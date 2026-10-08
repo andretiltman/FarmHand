@@ -68,6 +68,14 @@ export interface EggLog {
 /** A job an animal needs doing regularly (see care.ts). */
 export type CareKind = 'feed' | 'walk' | 'groom' | 'ride';
 
+/** One feeding, walk, grooming or ride. */
+export interface CareLog {
+  /** ISO timestamp. */
+  date: string;
+  /** The named animals it was done for; absent when it was done for all of them. */
+  who?: string[];
+}
+
 export interface AnimalItem extends Syncable {
   id: string;
   kind: 'animal';
@@ -76,6 +84,8 @@ export interface AnimalItem extends Syncable {
   species: string;
   /** Number of animals in this flock/entry. */
   headCount: number;
+  /** Their names, e.g. ["Annie", "Harley"], so you can log a walk for just some of them. Optional. */
+  names: string[];
   /** The jobs tracked for this animal, e.g. feed, walk and groom for a dog. */
   care: CareKind[];
   /** How often each job is due, in days; jobs left out use their usual timing. */
@@ -84,12 +94,11 @@ export interface AnimalItem extends Syncable {
   tracksEggs: boolean;
   /** Egg collections, newest first. */
   eggs: EggLog[];
-  /** ISO timestamps of each feeding, newest first. */
-  feedings: string[];
-  /** ISO timestamps of each walk, grooming and ride, newest first. */
-  walks: string[];
-  groomings: string[];
-  rides: string[];
+  /** Each feeding, walk, grooming and ride, newest first. */
+  feedings: CareLog[];
+  walks: CareLog[];
+  groomings: CareLog[];
+  rides: CareLog[];
   createdAt: string;
 }
 
