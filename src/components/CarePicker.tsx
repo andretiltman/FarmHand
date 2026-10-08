@@ -1,11 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { CARE, CARE_KINDS, careEvery } from '../care';
+import { CARE, CARE_KINDS, careEvery, findSpecies } from '../care';
 import { colors } from '../theme';
 import { CareKind } from '../types';
 import { Stepper } from './Stepper';
 
 interface Props {
+  /** For animals whose feeding depends on their size (snakes), size chips set the feeding interval. */
+  species?: string;
   care: CareKind[];
   careEvery: Partial<Record<CareKind, number>>;
   tracksEggs: boolean;
@@ -22,8 +24,29 @@ export function CarePicker(props: Props) {
       tracksEggs,
     );
 
+  const sizes = props.species ? findSpecies(props.species)?.sizes : undefined;
+  const feedEvery = careEvery(props, 'feed');
+
   return (
     <View>
+      {sizes && (
+        <View style={styles.sizes}>
+          <Text style={styles.rowLabel}>How big? Bigger ones eat less often.</Text>
+          <View style={[styles.chips, styles.sizeChips]}>
+            {sizes.map((s) => (
+              <CareChip
+                key={s.label}
+                label={`${s.label} · ${s.feedEvery}d`}
+                on={care.includes('feed') && feedEvery === s.feedEvery}
+                onPress={() => {
+                  if (!care.includes('feed')) onChange(['feed', ...care], tracksEggs);
+                  props.onChangeEvery('feed', s.feedEvery);
+                }}
+              />
+            ))}
+          </View>
+        </View>
+      )}
       <View style={styles.chips}>
         {CARE_KINDS.map((k) => (
           <CareChip
@@ -87,4 +110,6 @@ const styles = StyleSheet.create({
   chipTextOn: { color: colors.primaryText },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   rowLabel: { fontSize: 14, color: colors.text },
+  sizes: { marginBottom: 14 },
+  sizeChips: { marginTop: 8 },
 });

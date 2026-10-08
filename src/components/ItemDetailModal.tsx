@@ -470,6 +470,7 @@ export function ItemDetailModal(props: Props) {
             <NamesEditor names={item.names} onChange={(names) => props.onSetNames(item.id, names)} />
             <Text style={[styles.sectionTitle, styles.spacedTitle]}>Looking after</Text>
             <CarePicker
+              species={item.species}
               care={item.care}
               careEvery={item.careEvery}
               tracksEggs={item.tracksEggs}

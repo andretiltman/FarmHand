@@ -79,7 +79,7 @@ export const sections: Section[] = [
     label: 'Animals',
     emoji: '🐾',
     emptyTitle: 'No animals yet',
-    emptyText: 'Tap “Add” below to start tracking your chickens, dogs or horses.',
+    emptyText: 'Tap “Add” below to start tracking your chickens, dogs, horses or snakes.',
     includes: (item) => item.kind === 'animal',
   },
   {

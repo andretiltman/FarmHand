@@ -8,6 +8,7 @@ import { growthStatus } from '../growth';
 import { sowingAdvice } from '../seasons';
 import { colors, radius } from '../theme';
 import { CareKind, Growth, ItemKind, NewItem, SowMethod } from '../types';
+import { SeedPacket, seedsFor } from '../useSeeds';
 import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
@@ -21,6 +22,9 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSave: (item: NewItem) => void;
+  /** Seeds on hand, so sowing can show and take from what's left. */
+  seeds: SeedPacket[];
+  onTakeSeeds: (packetId: string, count: number) => void;
 }
 
 type Step = 'kind' | 'crop' | 'details' | 'review';
@@ -48,7 +52,7 @@ const TASK_INTERVALS: { days: number; label: string }[] = [
   { days: 365, label: 'Yearly' },
 ];
 
-export function AddItemModal({ visible, onClose, onSave }: Props) {
+export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds }: Props) {
   const [step, setStep] = useState<Step>('kind');
   const [kind, setKind] = useState<ItemKind | null>(null);
   const [name, setName] = useState('');
@@ -57,6 +61,8 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
   const [method, setMethod] = useState<SowMethod>('direct');
   const [sownDaysAgo, setSownDaysAgo] = useState(0);
   const [seedsSown, setSeedsSown] = useState(1);
+  /** The inventory packet the sown seeds come out of; null when they're not from the inventory. */
+  const [packetId, setPacketId] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [species, setSpecies] = useState('Chicken');
   const [headCount, setHeadCount] = useState(1);
@@ -79,6 +85,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       setMethod('direct');
       setSownDaysAgo(0);
       setSeedsSown(1);
+      setPacketId(null);
       setTags([]);
       setSpecies('Chicken');
       setHeadCount(1);
@@ -95,6 +102,8 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
   const crop = findCrop(cropId ?? undefined);
   const trimmedName = name.trim();
   const trimmedSpecies = species.trim() || 'Chicken';
+  const cropPackets = crop ? seeds.filter((p) => p.cropId === crop.id && p.count > 0) : [];
+  const packet = cropPackets.find((p) => p.id === packetId);
 
   const sequence = kind && kind !== 'plant' ? SHORT_STEPS : PLANT_STEPS;
   const stepIndex = sequence.indexOf(step);
@@ -124,6 +133,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       setMethod(c.recommended);
       setWaterEveryDays(c.waterEveryDays);
     }
+    if (c?.id !== cropId) setPacketId(seeds.find((p) => p.cropId === c?.id && p.count > 0)?.id ?? null);
     setStep('details');
   };
 
@@ -140,6 +150,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
 
   const save = () => {
     if (!kind || !trimmedName) return;
+    if (kind === 'plant' && growth && packet) onTakeSeeds(packet.id, seedsSown);
     onSave(
       kind === 'plant'
         ? { kind, name: trimmedName, waterEveryDays, growth, tags }
@@ -219,7 +230,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
           <KindOption
             emoji="🐔"
             title="Animal"
-            description="Chickens, dogs, horses – feeding, walks, grooming, rides and eggs"
+            description="Chickens, dogs, horses, snakes – feeding, walks, grooming, rides and eggs"
             color={colors.animal}
             soft={colors.animalSoft}
             onPress={() => chooseKind('animal')}
@@ -248,6 +259,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                 emoji={c.emoji}
                 label={c.name}
                 inSeason={sowingAdvice(c.guide.sow).inSeason}
+                seeds={seedsFor(seeds, c.id)}
                 selected={cropId === c.id}
                 onPress={() => chooseCrop(c)}
               />
@@ -349,6 +361,40 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                 max={999}
                 suffix={seedsSown === 1 ? 'seed' : 'seeds'}
               />
+
+              {cropPackets.length > 0 ? (
+                <>
+                  <Text style={styles.label}>From your seeds</Text>
+                  <View style={styles.chips}>
+                    {cropPackets.map((p) => (
+                      <Chip
+                        key={p.id}
+                        label={`🌰 ${p.name} · ${p.count} left`}
+                        selected={packetId === p.id}
+                        color={colors.plant}
+                        onPress={() => setPacketId(p.id)}
+                      />
+                    ))}
+                    <Chip
+                      label="Not from my inventory"
+                      selected={!packet}
+                      color={colors.plant}
+                      onPress={() => setPacketId(null)}
+                    />
+                  </View>
+                  {packet && (
+                    <Text style={[styles.hint, seedsSown > packet.count && styles.warn]}>
+                      {seedsSown > packet.count
+                        ? `You only have ${plural(packet.count, 'seed')} – the packet will be empty.`
+                        : `${plural(packet.count - seedsSown, 'seed')} left after sowing.`}
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text style={styles.hint}>
+                  🌰 No {crop.name.toLowerCase()} seeds in your inventory – add some with the 🌰 button on the home screen.
+                </Text>
+              )}
             </>
           )}
 
@@ -479,6 +525,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
               )}
               <Text style={styles.label}>What do they need?</Text>
               <CarePicker
+                species={trimmedSpecies}
                 care={care}
                 careEvery={careEvery}
                 tracksEggs={tracksEggs}
@@ -536,6 +583,12 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                   <Journey steps={growthStatus(growth).steps} />
                 </View>
                 <Text style={styles.reviewHeadline}>{growthStatus(growth).headline}</Text>
+                {packet && (
+                  <Text style={styles.reviewSeeds}>
+                    🌰 Uses {plural(Math.min(seedsSown, packet.count), 'seed')} from {packet.name} –{' '}
+                    {plural(Math.max(0, packet.count - seedsSown), 'seed')} left
+                  </Text>
+                )}
                 <Text style={styles.reviewNote}>Dates are estimates – you can confirm each stage as it happens.</Text>
               </>
             )}
@@ -582,13 +635,21 @@ function KindOption(props: {
   );
 }
 
-function CropTile(props: { emoji: string; label: string; inSeason: boolean; selected: boolean; onPress: () => void }) {
+function CropTile(props: {
+  emoji: string;
+  label: string;
+  inSeason: boolean;
+  /** Seeds on hand. */
+  seeds: number;
+  selected: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={props.onPress}
       style={({ pressed }) => [styles.cropTile, props.selected && styles.tileSelected, pressed && styles.pressed]}
       accessibilityRole="button"
-      accessibilityLabel={`${props.label}, ${props.inSeason ? 'in season' : 'off season'}`}
+      accessibilityLabel={`${props.label}, ${props.inSeason ? 'in season' : 'off season'}, ${plural(props.seeds, 'seed')} on hand`}
     >
       <Text style={styles.cropEmoji}>{props.emoji}</Text>
       <Text style={styles.cropLabel} numberOfLines={1}>
@@ -596,6 +657,9 @@ function CropTile(props: { emoji: string; label: string; inSeason: boolean; sele
       </Text>
       <Text style={[styles.cropSeason, props.inSeason && styles.cropInSeason]}>
         {props.inSeason ? '✓ In season' : 'Off season'}
+      </Text>
+      <Text style={[styles.cropSeeds, props.seeds > 0 && styles.cropHasSeeds]}>
+        🌰 {props.seeds > 0 ? `${props.seeds} left` : 'No seeds'}
       </Text>
     </Pressable>
   );
@@ -674,6 +738,8 @@ const styles = StyleSheet.create({
   cropLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 4 },
   cropSeason: { fontSize: 11, color: colors.muted, marginTop: 2 },
   cropInSeason: { color: colors.plant, fontWeight: '600' },
+  cropSeeds: { fontSize: 11, color: colors.muted, marginTop: 2, opacity: 0.7 },
+  cropHasSeeds: { color: colors.text, fontWeight: '600', opacity: 1 },
   otherTile: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -701,6 +767,7 @@ const styles = StyleSheet.create({
   },
   spaced: { marginTop: 10 },
   hint: { fontSize: 13, color: colors.muted, marginTop: 6 },
+  warn: { color: colors.warning, fontWeight: '600' },
   method: {
     flexDirection: 'row',
     gap: 12,
@@ -748,5 +815,6 @@ const styles = StyleSheet.create({
   reviewDetail: { fontSize: 15, color: colors.muted, marginTop: 4, textAlign: 'center' },
   reviewJourney: { alignSelf: 'stretch', marginTop: 20 },
   reviewHeadline: { fontSize: 16, fontWeight: '700', color: colors.plant, marginTop: 16, textAlign: 'center' },
+  reviewSeeds: { fontSize: 14, color: colors.text, marginTop: 10, textAlign: 'center' },
   reviewNote: { fontSize: 12, color: colors.muted, marginTop: 6, textAlign: 'center' },
 });

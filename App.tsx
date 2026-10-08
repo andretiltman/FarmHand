@@ -8,12 +8,14 @@ import { AddItemModal } from './src/components/AddItemModal';
 import { HomeAssistantModal } from './src/components/HomeAssistantModal';
 import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
+import { SeedsModal } from './src/components/SeedsModal';
 import { TransferModal } from './src/components/TransferModal';
 import { SectionKey, sections } from './src/sections';
 import { colors, radius } from './src/theme';
 import { CareKind } from './src/types';
 import { useHomeAssistant } from './src/useHomeAssistant';
 import { useItems } from './src/useItems';
+import { useSeeds } from './src/useSeeds';
 
 export default function App() {
   return (
@@ -55,9 +57,11 @@ function HomeScreen() {
     removePhoto,
     undoLast,
   } = useItems();
+  const seeds = useSeeds();
   const homeAssistant = useHomeAssistant(items, loaded, { itemsRef, deletedRef, applySnapshot });
   const [adding, setAdding] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [stocking, setStocking] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Set when a card's care button opens the details popup to pick which named animals it was for. */
@@ -113,6 +117,15 @@ function HomeScreen() {
             {taskCount > 0 ? ` · ${taskCount} task${taskCount === 1 ? '' : 's'}` : ''}
           </Text>
         </View>
+        <Pressable
+          onPress={() => setStocking(true)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.haButton, pressed && { opacity: 0.7 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Seed inventory"
+        >
+          <Text style={styles.haIcon}>🌰</Text>
+        </Pressable>
         <Pressable
           onPress={() => setTransferring(true)}
           hitSlop={8}
@@ -256,7 +269,21 @@ function HomeScreen() {
         deletedRef={deletedRef}
         onSync={applySnapshot}
       />
-      <AddItemModal visible={adding} onClose={() => setAdding(false)} onSave={addItem} />
+      <SeedsModal
+        visible={stocking}
+        onClose={() => setStocking(false)}
+        packets={seeds.packets}
+        onAdd={seeds.addSeeds}
+        onSetCount={seeds.setSeedCount}
+        onRemove={seeds.removePacket}
+      />
+      <AddItemModal
+        visible={adding}
+        onClose={() => setAdding(false)}
+        onSave={addItem}
+        seeds={seeds.packets}
+        onTakeSeeds={seeds.takeSeeds}
+      />
       <ItemDetailModal
         item={selected}
         onClose={() => {
