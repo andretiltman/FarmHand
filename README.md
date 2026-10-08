@@ -18,7 +18,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
 - **Maintenance tasks** – recurring jobs like *Septic tank bio enzymes* (monthly), *Clean gutters* or *Service lawnmower*. Pick a suggestion or type your own, choose how often it repeats (weekly to yearly, or any number of days), and say when it was last done so it doesn't start out overdue. Each shows when it's next due (orange when due, red when overdue).
 - **Animal care** – each animal tracks the jobs it needs: 🌾 **Feed**, 🐾 **Walk**, 🧼 **Groom** and 🏇 **Ride**, plus 🥚 **Eggs** for laying birds. Picking a type fills in the usual ones – chickens, ducks and quail: feed daily and collect eggs; dogs: feed and walk daily, groom weekly; horses: feed and groom daily, ride every 2 days; snakes: feed by size, from every 5 days for a hatchling to every 3 weeks for a large adult – and you can turn jobs on or off and change how often each is due, when adding the animal or later in its details.
 - **Snakes** – pick a size (*Hatchling* 5 days, *Juvenile* 7, *Sub-adult* 10, *Adult* 14, *Large adult* 21) to set how often it's fed. As it grows, pick the next size in its details (or set any number of days).
-- **Seed inventory** – tap 🌰 at the top to keep track of the seeds you have on hand (not yet sown): pick the crop, name the variety (e.g. *Cherry tomato*) and how many. When adding a plant, each crop tile shows how many seeds you have left, you pick which packet you're sowing from, it shows how many will be left, and saving takes the sown seeds out of the inventory. The inventory stays on this phone (it isn't synced).
+- **Seed inventory** – tap 🌰 at the top to keep track of the seeds you have on hand (not yet sown): pick the crop, name the variety (e.g. *Cherry tomato*) and how many. When adding a plant, each crop tile shows how many seeds you have left, you pick which packet you're sowing from, it shows how many will be left, and saving takes the sown seeds out of the inventory. Tap a packet to 📷 take or choose photos of it (like plant photos – handy for the variety and sowing notes on the back), change how many are left, remove it, or send some to someone. The inventory isn't part of syncing between phones.
 - **Named animals** – give a group of animals names (e.g. *Annie* and *Harley*), when adding them or later in their details. Tapping Feed, Walk, … then asks which of them it was for, with ticks for the ones that are due (or everyone) already set, and the history reads *Fed all* or *Walked Annie and Harley*. Each named animal is tracked on its own, so the dogs stay due until both have been walked – the card then says e.g. *🐾 Walk Harley*.
 - **Quick actions** – tap 💧 **Water** on a plant, ✓ **Done** on a maintenance task, or a care job (🌾 **Feed**, 🐾 **Walk**, …) / 🥚 **+1** on an animal, right from the list. Animals show two buttons, with whatever's due first; every job has a button in the details popup.
 - **Guided "Add" popup** – the **Add** button at the bottom opens a step-by-step popup:
@@ -38,6 +38,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
 - **Seasons follow your hemisphere** – worked out from the phone's time zone, so October is spring in South Africa and autumn in Europe.
 - **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, change how often a plant needs watering or a task repeats, rename it (✏️ **Rename**), or delete it.
 - **Full screen on Android** – the system navigation bar is hidden while FarmHand is open; swipe up from the bottom edge to bring it back briefly.
+- **Send seeds to someone** – tap 📤 → **Send seeds** (or **Send seeds** on a packet), tick the packets, choose how many seeds to give from each and whether to include the packet photos, and share the file the same way as plants. They tap 📤 → **Receive** → **Choose file** and the seeds are added to their 🌰 inventory (topping up a packet with the same name). Afterwards, **Take them out** removes the seeds you gave from your inventory.
 - **Send plants to another phone** – tap 📤 at the top, tick the plants to send (optionally with their photos) and tap **Send**. FarmHand makes a small file and opens your phone's share menu, so you can send it by WhatsApp, email, Bluetooth, Nearby Share or AirDrop. The other person saves the file, taps 📤 → **Receive** → **Choose file**, and the plants are added with their whole journey, watering history, tags and photos. Afterwards the sender can **Remove from my phone** to finish the move, or keep a copy if you're both looking after them.
 - **Sync two phones** – for a garden you look after together. Each phone keeps its own copy and they merge each other's changes: waterings, feedings, walks, groomings, rides, eggs and jobs done on either phone are all kept (so you'll both see the plants were watered), and for anything else – a rename, a new watering schedule, a growth stage – the most recent change wins. Deleting something or undoing an entry on one phone removes it on the other too. Two ways to sync:
   - **Automatically through Home Assistant** – connect both phones to the same Home Assistant (🏠) and turn on **Sync with other phones** on both. Changes come through within a minute while FarmHand is open. Photos stay on the phone that took them.
@@ -100,13 +101,13 @@ src/sections.ts                 Home screen sections (Overview / Sown / Seedling
 src/components/AddItemModal.tsx Guided add popup (plant, animal or maintenance task)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
 src/components/HomeAssistantModal.tsx  Connect to Home Assistant
-src/components/TransferModal.tsx  Send plants to / receive plants from another phone
-src/transfer.ts                 Plant transfer and sync file formats (pack / unpack)
+src/components/TransferModal.tsx  Send plants or seeds to / receive them from another phone
+src/transfer.ts                 Plant, seed and sync file formats (pack / unpack)
 src/sync.ts                     Merging two phones' copies of the items
 src/ids.ts, src/device.ts       Item GUIDs and this phone's id
 src/transferFile(.web).ts       Share sheet and file picker for transfer files
 src/components/ItemCard.tsx     A row in the list
-src/components/SeedsModal.tsx   Seed inventory: seeds on hand, add more
+src/components/SeedsModal.tsx   Seed inventory: seeds on hand, packet photos, add more
 src/components/CarePicker.tsx   Choose an animal's care jobs and how often
 src/components/NamePicker.tsx   Animal names, and ticking which ones a feed/walk/… was for
 src/components/Journey.tsx      Growth timeline

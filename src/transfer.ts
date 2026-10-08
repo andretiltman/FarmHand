@@ -1,6 +1,6 @@
 import { photoToDataUrl } from './photoStorage';
 import { checkSnapshot, Deleted, isSnapshot, makeSnapshot, SyncSnapshot } from './sync';
-import { Growth, PlantItem, PlantPhoto, TrackedItem } from './types';
+import { Growth, PlantItem, PlantPhoto, SeedPacket, TrackedItem } from './types';
 
 /** Marks a file as FarmHand plants, so we can tell it apart from any other JSON file. */
 const FORMAT = 'farmhand-plants';
@@ -39,21 +39,24 @@ export function splitGrowth(g: Growth, give: number): { sent: Growth; kept: Grow
   };
 }
 
+/** Reads photos as data: URLs so they can travel inside a file, skipping any that can't be read. */
+async function embedPhotos(photos: PlantPhoto[]): Promise<PlantPhoto[]> {
+  const embedded: PlantPhoto[] = [];
+  for (const photo of photos) {
+    try {
+      embedded.push({ ...photo, uri: await photoToDataUrl(photo.uri) });
+    } catch (e) {
+      console.warn('Skipping a photo that could not be read', e);
+    }
+  }
+  return embedded;
+}
+
 /** Packs plants (with their full history, and optionally their photos) into a file's text. */
 export async function packPlants(plants: PlantItem[], includePhotos: boolean): Promise<string> {
   const packed: TransferPlant[] = [];
   for (const plant of plants) {
-    const photos = [];
-    if (includePhotos) {
-      for (const photo of plant.photos) {
-        try {
-          photos.push({ ...photo, uri: await photoToDataUrl(photo.uri) });
-        } catch (e) {
-          console.warn('Skipping a photo that could not be read', e);
-        }
-      }
-    }
-    packed.push({ ...plant, photos });
+    packed.push({ ...plant, photos: includePhotos ? await embedPhotos(plant.photos) : [] });
   }
   const file: TransferFile = { format: FORMAT, version: VERSION, sentAt: new Date().toISOString(), plants: packed };
   return JSON.stringify(file);
@@ -125,24 +128,68 @@ export async function packSync(
     snapshot.items = await Promise.all(
       snapshot.items.map(async (item) => {
         if (item.kind !== 'plant') return item;
-        const photos = [];
-        for (const photo of photosToSend(item.photos, photoChoice)) {
-          try {
-            photos.push({ ...photo, uri: await photoToDataUrl(photo.uri) });
-          } catch (e) {
-            console.warn('Skipping a photo that could not be read', e);
-          }
-        }
-        return { ...item, photos };
+        return { ...item, photos: await embedPhotos(photosToSend(item.photos, photoChoice)) };
       }),
     );
   }
   return JSON.stringify(snapshot);
 }
 
-export type Received = { kind: 'plants'; file: TransferFile } | { kind: 'sync'; snapshot: SyncSnapshot };
+/** Marks a file as FarmHand seeds from someone's seed inventory. */
+const SEEDS_FORMAT = 'farmhand-seeds';
+const SEEDS_VERSION = 1;
 
-/** Works out whether a received file holds plants to add or a sync from another phone. */
+export interface SeedsFile {
+  format: typeof SEEDS_FORMAT;
+  version: number;
+  sentAt: string;
+  /** `count` is how many seeds were given; photos are embedded as data: URLs. */
+  seeds: SeedPacket[];
+}
+
+/** Packs seeds (with `count` set to how many are given) and optionally their packet photos into a file's text. */
+export async function packSeeds(seeds: SeedPacket[], includePhotos: boolean): Promise<string> {
+  const packed: SeedPacket[] = [];
+  for (const packet of seeds) {
+    packed.push({ ...packet, photos: includePhotos ? await embedPhotos(packet.photos) : [] });
+  }
+  const file: SeedsFile = { format: SEEDS_FORMAT, version: SEEDS_VERSION, sentAt: new Date().toISOString(), seeds: packed };
+  return JSON.stringify(file);
+}
+
+function checkSeeds(data: Partial<SeedsFile>): SeedsFile {
+  if ((data.version ?? 0) > SEEDS_VERSION) {
+    throw new Error('That file was sent from a newer version of FarmHand – update the app and try again.');
+  }
+  const seeds = (Array.isArray(data.seeds) ? data.seeds : []).filter(
+    (s) => s && typeof s.name === 'string' && typeof s.cropId === 'string' && typeof s.count === 'number' && s.count > 0,
+  );
+  if (seeds.length === 0) throw new Error('There are no seeds in that file.');
+  return {
+    format: SEEDS_FORMAT,
+    version: data.version ?? SEEDS_VERSION,
+    sentAt: data.sentAt ?? '',
+    seeds: seeds.map((s) => ({
+      ...s,
+      count: Math.round(s.count),
+      photos: Array.isArray(s.photos) ? s.photos.filter((ph) => typeof ph?.uri === 'string' && ph.uri.startsWith('data:')) : [],
+    })),
+  };
+}
+
+/** e.g. "FarmHand seeds - Cherry tomato.farmhand.json" or "FarmHand seeds - 3 packets.farmhand.json". */
+export function seedsFileName(seeds: SeedPacket[]): string {
+  const label = seeds.length === 1 ? seeds[0].name : `${seeds.length} packets`;
+  const safe = label.replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'seeds';
+  return `FarmHand seeds - ${safe}.farmhand.json`;
+}
+
+export type Received =
+  | { kind: 'plants'; file: TransferFile }
+  | { kind: 'seeds'; file: SeedsFile }
+  | { kind: 'sync'; snapshot: SyncSnapshot };
+
+/** Works out whether a received file holds plants or seeds to add, or a sync from another phone. */
 export function unpackReceived(text: string): Received {
   let data: unknown;
   try {
@@ -151,6 +198,9 @@ export function unpackReceived(text: string): Received {
     throw new Error("That file isn't from FarmHand.");
   }
   if (isSnapshot(data)) return { kind: 'sync', snapshot: checkSnapshot(data) };
+  if ((data as Partial<SeedsFile> | null)?.format === SEEDS_FORMAT) {
+    return { kind: 'seeds', file: checkSeeds(data as Partial<SeedsFile>) };
+  }
   return { kind: 'plants', file: unpackPlants(text) };
 }
 

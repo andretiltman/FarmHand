@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CROPS, findCrop } from '../crops';
 import { plural } from '../dates';
 import { colors, radius } from '../theme';
-import { OTHER_SEED, SeedPacket } from '../useSeeds';
+import { SeedPacket } from '../types';
+import { OTHER_SEED } from '../useSeeds';
 import { Button } from './Button';
+import { PhotoLog } from './PhotoLog';
+import { PhotoViewer } from './PhotoViewer';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
 
@@ -13,30 +16,50 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   packets: SeedPacket[];
-  onAdd: (cropId: string, name: string, count: number) => void;
+  /** Returns the id of the packet the seeds went into. */
+  onAdd: (cropId: string, name: string, count: number) => string;
   onSetCount: (id: string, count: number) => void;
   onRemove: (id: string) => void;
+  onAddPhoto: (id: string, pickedUri: string) => Promise<void>;
+  onSetPhotoDate: (id: string, photoId: string, takenAt: string) => void;
+  onRemovePhoto: (id: string, photoId: string) => void;
+  /** Opens "Send seeds" with this packet ticked. */
+  onSend: (id: string) => void;
 }
+
+/** What the popup is showing: all packets, the add form, one packet, or one of its photos. */
+type View_ =
+  | { kind: 'list' }
+  | { kind: 'add' }
+  | { kind: 'packet'; id: string }
+  | { kind: 'photo'; id: string; photoId: string };
 
 const MAX_SEEDS = 9999;
 const QUICK_COUNTS = [10, 25, 50, 100];
 
-/** The seed inventory: packets on hand, and a form to add more. */
-export function SeedsModal({ visible, onClose, packets, onAdd, onSetCount, onRemove }: Props) {
-  const [adding, setAdding] = useState(false);
+/** The seed inventory: packets on hand (with photos of each packet), and a form to add more. */
+export function SeedsModal(props: Props) {
+  const { visible, onClose, packets, onAdd, onSetCount, onRemove } = props;
+  const [view, setView] = useState<View_>({ kind: 'list' });
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [cropId, setCropId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [count, setCount] = useState(10);
 
   useEffect(() => {
-    if (visible) setAdding(packets.length === 0);
+    if (visible) setView({ kind: packets.length === 0 ? 'add' : 'list' });
   }, [visible]);
+
+  const open = (next: View_) => {
+    setConfirmRemove(false);
+    setView(next);
+  };
 
   const startAdding = () => {
     setCropId(null);
     setName('');
     setCount(10);
-    setAdding(true);
+    open({ kind: 'add' });
   };
 
   const chooseCrop = (id: string) => {
@@ -49,8 +72,8 @@ export function SeedsModal({ visible, onClose, packets, onAdd, onSetCount, onRem
   const trimmed = name.trim();
   const save = () => {
     if (!cropId || !trimmed) return;
-    onAdd(cropId, trimmed, count);
-    setAdding(false);
+    // Open the packet so a photo of it can be taken straight away.
+    open({ kind: 'packet', id: onAdd(cropId, trimmed, count) });
   };
 
   const total = packets.reduce((n, p) => n + p.count, 0);
@@ -61,7 +84,94 @@ export function SeedsModal({ visible, onClose, packets, onAdd, onSetCount, onRem
   };
   const sorted = [...packets].sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
 
-  if (adding) {
+  const packet = view.kind === 'packet' || view.kind === 'photo' ? packets.find((p) => p.id === view.id) : undefined;
+
+  if (view.kind === 'photo' && packet) {
+    const photo = packet.photos.find((ph) => ph.id === view.photoId);
+    if (photo) {
+      return (
+        <Sheet visible={visible} onClose={onClose} subtitle={packet.name} title="Packet photo">
+          <PhotoViewer
+            key={photo.id}
+            photo={photo}
+            onClose={() => open({ kind: 'packet', id: packet.id })}
+            onChangeDate={(takenAt) => props.onSetPhotoDate(packet.id, photo.id, takenAt)}
+            onDelete={() => {
+              props.onRemovePhoto(packet.id, photo.id);
+              open({ kind: 'packet', id: packet.id });
+            }}
+          />
+        </Sheet>
+      );
+    }
+  }
+
+  if (packet) {
+    const crop = findCrop(packet.cropId);
+    return (
+      <Sheet
+        visible={visible}
+        onClose={onClose}
+        subtitle={crop && crop.name !== packet.name ? `${crop.emoji} ${crop.name}` : 'Seed inventory'}
+        title={packet.name}
+        footer={
+          confirmRemove ? (
+            <>
+              <Button label="Keep" variant="secondary" onPress={() => setConfirmRemove(false)} />
+              <Button
+                label="Yes, remove"
+                variant="danger"
+                onPress={() => {
+                  onRemove(packet.id);
+                  open({ kind: 'list' });
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Button label="Back" variant="secondary" onPress={() => open({ kind: 'list' })} />
+              <Button
+                label="📤 Send seeds"
+                color={colors.plant}
+                disabled={packet.count === 0}
+                onPress={() => props.onSend(packet.id)}
+              />
+            </>
+          )
+        }
+      >
+        <ScrollView style={styles.shrink}>
+          <Text style={[styles.label, styles.firstLabel]}>Photos of the packet</Text>
+          <PhotoLog
+            photos={packet.photos}
+            onAdd={(uri) => props.onAddPhoto(packet.id, uri)}
+            onOpen={(ph) => open({ kind: 'photo', id: packet.id, photoId: ph.id })}
+            emptyText="No photos yet – snap the front and back of the packet to keep the variety and sowing notes."
+          />
+
+          <Text style={styles.label}>Seeds left</Text>
+          <Stepper
+            label={`${packet.name} seeds`}
+            value={packet.count}
+            onChange={(n) => onSetCount(packet.id, n)}
+            min={0}
+            max={MAX_SEEDS}
+            suffix={packet.count === 1 ? 'seed' : 'seeds'}
+          />
+
+          <Pressable
+            onPress={() => setConfirmRemove(true)}
+            style={({ pressed }) => [styles.removePacket, pressed && styles.pressed]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.removePacketText}>🗑️ Remove this packet</Text>
+          </Pressable>
+        </ScrollView>
+      </Sheet>
+    );
+  }
+
+  if (view.kind === 'add') {
     return (
       <Sheet
         visible={visible}
@@ -73,7 +183,7 @@ export function SeedsModal({ visible, onClose, packets, onAdd, onSetCount, onRem
             <Button
               label={packets.length ? 'Back' : 'Cancel'}
               variant="secondary"
-              onPress={() => (packets.length ? setAdding(false) : onClose())}
+              onPress={() => (packets.length ? open({ kind: 'list' }) : onClose())}
             />
             <Button label="Add seeds" color={colors.plant} disabled={!cropId || !trimmed} onPress={save} />
           </>
@@ -111,7 +221,9 @@ export function SeedsModal({ visible, onClose, packets, onAdd, onSetCount, onRem
               <Chip key={n} label={String(n)} selected={count === n} onPress={() => setCount(n)} />
             ))}
           </View>
-          <Text style={styles.hint}>Adding seeds of the same name tops up the existing packet.</Text>
+          <Text style={styles.hint}>
+            Adding seeds of the same name tops up the existing packet. Next you can take a photo of the packet.
+          </Text>
         </ScrollView>
       </Sheet>
     );
@@ -128,31 +240,42 @@ export function SeedsModal({ visible, onClose, packets, onAdd, onSetCount, onRem
       <ScrollView style={styles.shrink}>
         {sorted.map((p) => {
           const crop = findCrop(p.cropId);
+          const meta = [
+            crop && crop.name !== p.name ? crop.name : '',
+            p.photos.length ? plural(p.photos.length, 'photo') : '',
+          ].filter(Boolean);
           return (
-            <View key={p.id} style={[styles.packet, p.count === 0 && styles.empty]}>
-              <Text style={styles.packetEmoji}>{crop?.emoji ?? '🌰'}</Text>
+            <Pressable
+              key={p.id}
+              onPress={() => open({ kind: 'packet', id: p.id })}
+              style={({ pressed }) => [styles.packet, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`${p.name}, ${plural(p.count, 'seed')}`}
+            >
+              {p.photos[0] ? (
+                <Image source={{ uri: p.photos[0].uri }} style={styles.packetPhoto} />
+              ) : (
+                <View style={styles.packetIcon}>
+                  <Text style={styles.packetEmoji}>{crop?.emoji ?? '🌰'}</Text>
+                </View>
+              )}
               <View style={styles.packetInfo}>
                 <Text style={styles.packetName} numberOfLines={2}>
                   {p.name}
                 </Text>
-                <Text style={styles.packetMeta}>
-                  {p.count === 0 ? 'None left' : crop && crop.name !== p.name ? crop.name : 'Seeds'}
-                </Text>
+                {meta.length ? <Text style={styles.packetMeta}>{meta.join(' · ')}</Text> : null}
               </View>
-              <Stepper label={`${p.name} seeds`} value={p.count} onChange={(n) => onSetCount(p.id, n)} min={0} max={MAX_SEEDS} />
-              <Pressable
-                onPress={() => onRemove(p.id)}
-                hitSlop={8}
-                style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${p.name} seeds`}
-              >
-                <Text style={styles.removeText}>✕</Text>
-              </Pressable>
-            </View>
+              <Text style={[styles.packetCount, p.count === 0 && styles.none]}>
+                {p.count === 0 ? 'None left' : plural(p.count, 'seed')}
+              </Text>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
           );
         })}
-        <Text style={styles.hint}>Seeds you sow when adding a plant are taken out of here.</Text>
+        <Text style={styles.hint}>
+          Tap a packet to add photos, change how many are left or send some. Seeds you sow when adding a plant are taken
+          out of here.
+        </Text>
       </ScrollView>
     </Sheet>
   );
@@ -208,11 +331,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  empty: { opacity: 0.6 },
+  packetIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.sm,
+    backgroundColor: colors.plantSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  packetPhoto: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.background },
   packetEmoji: { fontSize: 26 },
   packetInfo: { flex: 1, minWidth: 0 },
   packetName: { fontSize: 15, fontWeight: '600', color: colors.text },
   packetMeta: { fontSize: 12, color: colors.muted, marginTop: 1 },
-  remove: { padding: 4 },
-  removeText: { fontSize: 16, color: colors.muted },
+  packetCount: { fontSize: 15, fontWeight: '700', color: colors.text },
+  none: { color: colors.muted, fontWeight: '500' },
+  chevron: { fontSize: 22, color: colors.muted, marginLeft: 2 },
+  removePacket: { alignSelf: 'flex-start', marginTop: 24, paddingVertical: 6 },
+  removePacketText: { fontSize: 15, fontWeight: '600', color: colors.danger },
 });

@@ -45,7 +45,7 @@ export function PhotoViewer({ photo, sownAt, onClose, onChangeDate, onDelete }: 
 
   return (
     <View>
-      <Image source={{ uri: photo.uri }} style={styles.image} resizeMode="contain" accessibilityLabel="Plant photo" />
+      <Image source={{ uri: photo.uri }} style={styles.image} resizeMode="contain" accessibilityLabel="Photo" />
       <Text style={styles.caption}>
         {sownAt ? `${photoLabel(photo, sownAt)} · ` : ''}
         {formatDateTime(photo.takenAt)}

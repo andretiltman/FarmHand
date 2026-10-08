@@ -12,6 +12,8 @@ interface Props {
   sownAt?: string;
   onAdd: (pickedUri: string) => Promise<void>;
   onOpen: (photo: PlantPhoto) => void;
+  /** Shown when there are no photos yet. */
+  emptyText?: string;
 }
 
 export function photoLabel(photo: PlantPhoto, sownAt?: string): string {
@@ -20,8 +22,8 @@ export function photoLabel(photo: PlantPhoto, sownAt?: string): string {
   return `Day ${Math.max(0, daysBetween(new Date(sownAt), date))}`;
 }
 
-/** Progress photos for a plant: a row of thumbnails plus camera / library buttons. */
-export function PhotoLog({ photos, sownAt, onAdd, onOpen }: Props) {
+/** Progress photos for a plant (or photos of a seed packet): a row of thumbnails plus camera / library buttons. */
+export function PhotoLog({ photos, sownAt, onAdd, onOpen, emptyText = 'No photos yet – add one to watch it grow.' }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,7 +71,7 @@ export function PhotoLog({ photos, sownAt, onAdd, onOpen }: Props) {
           ))}
         </ScrollView>
       ) : (
-        <Text style={styles.empty}>No photos yet – add one to watch it grow.</Text>
+        <Text style={styles.empty}>{emptyText}</Text>
       )}
       <View style={styles.buttons}>
         <PhotoButton label="📷  Take photo" onPress={() => pick('camera')} disabled={busy} />
