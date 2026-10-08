@@ -48,6 +48,7 @@ function HomeScreen() {
     setCare,
     setCareEvery,
     setNames,
+    keepAnimals,
     completeTask,
     setTaskEvery,
     advanceStage,
@@ -124,7 +125,7 @@ function HomeScreen() {
           hitSlop={8}
           style={({ pressed }) => [styles.haButton, pressed && { opacity: 0.7 }]}
           accessibilityRole="button"
-          accessibilityLabel="Send or receive plants, animals and seeds"
+          accessibilityLabel="Send or receive plants, animals, tasks and seeds"
         >
           <Text style={styles.haIcon}>📤</Text>
         </Pressable>
@@ -262,6 +263,7 @@ function HomeScreen() {
         onImport={importItems}
         onRemove={removeItems}
         onUpdateGrowth={updateGrowth}
+        onKeepAnimals={keepAnimals}
         deletedRef={deletedRef}
         onSync={applySnapshot}
         seeds={seeds.packets}

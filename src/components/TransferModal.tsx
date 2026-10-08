@@ -18,6 +18,8 @@ import {
   RECENT_PHOTO_DAYS,
   splitGrowth,
   syncFileName,
+  KeptAnimals,
+  splitAnimal,
   TransferFile,
   transferFileName,
   TransferPick,
@@ -25,7 +27,7 @@ import {
   unpackReceived,
 } from '../transfer';
 import { pickTransferFile, shareTransferFile } from '../transferFile';
-import { AnimalItem, Growth, PlantItem, SeedPacket, TrackedItem } from '../types';
+import { AnimalItem, Growth, PlantItem, SeedPacket, TaskItem, TrackedItem } from '../types';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
@@ -34,9 +36,10 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   items: TrackedItem[];
-  onImport: (plants: TransferPlant[], animals: AnimalItem[]) => Promise<void>;
+  onImport: (plants: TransferPlant[], others: (AnimalItem | TaskItem)[]) => Promise<void>;
   onRemove: (ids: string[]) => void;
   onUpdateGrowth: (id: string, growth: Growth) => void;
+  onKeepAnimals: (id: string, kept: KeptAnimals) => void;
   deletedRef: MutableRefObject<Deleted>;
   onSync: (snapshot: SyncSnapshot) => Promise<MergeResult>;
   /** The seed inventory. */
@@ -51,27 +54,34 @@ type Step =
   | { kind: 'menu' }
   | { kind: 'send' }
   /**
-   * `ids` are the plants and animals sent, `kept` what stays here for plants only partly given away,
-   * and `given` how many seeds were given from each packet.
+   * `ids` are the plants, animals and tasks sent, `kept` what stays here for plants and `keptAnimals` for
+   * animals only partly given away, and `given` how many seeds were given from each packet.
    */
-  | { kind: 'sent'; ids: string[]; kept: Record<string, Growth>; given: Record<string, number> }
+  | {
+      kind: 'sent';
+      ids: string[];
+      kept: Record<string, Growth>;
+      keptAnimals: Record<string, KeptAnimals>;
+      given: Record<string, number>;
+    }
   | { kind: 'sync' }
   | { kind: 'receive'; received: Received | null }
-  | { kind: 'received'; plants: number; animals: number; seeds: number }
+  | { kind: 'received'; plants: number; animals: number; tasks: number; seeds: number }
   | { kind: 'synced'; result: MergeResult };
 
-/** e.g. "2 plants, 1 animal and 30 seeds". */
-function describe(plants: number, animals: number, seeds: number): string {
+/** e.g. "2 plants, 1 animal, 1 task and 30 seeds". */
+function describe(plants: number, animals: number, tasks: number, seeds: number): string {
   const parts = [
     plants ? plural(plants, 'plant') : '',
     animals ? plural(animals, 'animal') : '',
+    tasks ? plural(tasks, 'task') : '',
     seeds ? plural(seeds, 'seed') : '',
   ].filter(Boolean);
   return parts.length < 2 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
 /**
- * Send plants, animals and seeds to another phone as a file (via WhatsApp, email, Bluetooth, …), add what
+ * Send plants, animals, tasks and seeds to another phone as a file (via WhatsApp, email, Bluetooth, …), add what
  * someone sent you, or sync everything with another phone by swapping sync files.
  */
 export function TransferModal({
@@ -81,6 +91,7 @@ export function TransferModal({
   onImport,
   onRemove,
   onUpdateGrowth,
+  onKeepAnimals,
   deletedRef,
   onSync,
   seeds,
@@ -90,12 +101,15 @@ export function TransferModal({
 }: Props) {
   const plants = items.filter((i): i is PlantItem => i.kind === 'plant');
   const animals = items.filter((i): i is AnimalItem => i.kind === 'animal');
+  const tasks = items.filter((i): i is TaskItem => i.kind === 'task');
   const packets = seeds.filter((p) => p.count > 0);
   const [step, setStep] = useState<Step>({ kind: 'menu' });
-  /** Ticked plants, animals and seed packets. */
+  /** Ticked plants, animals, tasks and seed packets. */
   const [selected, setSelected] = useState<string[]>([]);
-  /** How many plants or seeds to give, for entries holding several (all of them when not set). */
+  /** How many plants, animals or seeds to give, for entries holding several (all of them when not set). */
   const [amounts, setAmounts] = useState<Record<string, number>>({});
+  /** Which named animals to give, for entries with names (all of them when not set). */
+  const [giveNames, setGiveNames] = useState<Record<string, string[]>>({});
   const [includePhotos, setIncludePhotos] = useState(true);
   const [syncPhotos, setSyncPhotos] = useState<PhotoChoice>('recent');
   const [busy, setBusy] = useState(false);
@@ -106,6 +120,7 @@ export function TransferModal({
       setStep(sendPacketId ? { kind: 'send' } : { kind: 'menu' });
       setSelected(sendPacketId ? [sendPacketId] : []);
       setAmounts({});
+      setGiveNames({});
       setIncludePhotos(true);
       setSyncPhotos('recent');
       setError(null);
@@ -131,13 +146,14 @@ export function TransferModal({
 
   const chosenPlants = plants.filter((p) => selected.includes(p.id));
   const chosenAnimals = animals.filter((a) => selected.includes(a.id));
+  const chosenTasks = tasks.filter((t) => selected.includes(t.id));
   const chosenSeeds = packets.filter((p) => selected.includes(p.id));
-  const chosenCount = chosenPlants.length + chosenAnimals.length + chosenSeeds.length;
+  const chosenCount = chosenPlants.length + chosenAnimals.length + chosenTasks.length + chosenSeeds.length;
   const photoCount =
     chosenPlants.reduce((n, p) => n + p.photos.length, 0) + chosenSeeds.reduce((n, p) => n + p.photos.length, 0);
   const syncPhotoCount = (choice: PhotoChoice) =>
     plants.reduce((n, p) => n + photosToSend(p.photos, choice).length, 0);
-  const allIds = [...plants, ...animals, ...packets].map((i) => i.id);
+  const allIds = [...plants, ...animals, ...tasks, ...packets].map((i) => i.id);
   const allSelected = allIds.length > 0 && allIds.every((id) => selected.includes(id));
   const toggle = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -147,6 +163,25 @@ export function TransferModal({
     return total === undefined ? undefined : Math.min(amounts[p.id] ?? total, total);
   };
   const seedAmountOf = (p: SeedPacket) => Math.min(amounts[p.id] ?? p.count, p.count);
+  /** The named animals to give, or how many for unnamed ones. */
+  const animalGiveOf = (a: AnimalItem): string[] | number =>
+    a.names.length > 0
+      ? a.names.filter((n) => (giveNames[a.id] ?? a.names).includes(n))
+      : Math.min(amounts[a.id] ?? a.headCount, a.headCount);
+  const givesAll = (a: AnimalItem) => {
+    const give = animalGiveOf(a);
+    return typeof give === 'number' ? give >= a.headCount : give.length === a.names.length;
+  };
+  const toggleName = (a: AnimalItem, name: string) =>
+    setGiveNames((prev) => {
+      const current = prev[a.id] ?? a.names;
+      return { ...prev, [a.id]: current.includes(name) ? current.filter((n) => n !== name) : [...current, name] };
+    });
+  /** Named animals ticked to send with none of their names picked. */
+  const noNamesPicked = chosenAnimals.some((a) => {
+    const give = animalGiveOf(a);
+    return typeof give !== 'number' && give.length === 0;
+  });
 
   const send = () =>
     run(async () => {
@@ -158,14 +193,23 @@ export function TransferModal({
         kept[p.id] = split.kept;
         return { ...p, growth: split.sent };
       });
+      const keptAnimals: Record<string, KeptAnimals> = {};
+      const sentAnimals = chosenAnimals.map((a) => {
+        if (givesAll(a)) return a;
+        const split = splitAnimal(a, animalGiveOf(a));
+        keptAnimals[a.id] = split.kept;
+        return split.sent;
+      });
       const given = Object.fromEntries(chosenSeeds.map((p) => [p.id, seedAmountOf(p)]));
       const pick: TransferPick = {
         plants: sentPlants,
-        animals: chosenAnimals,
+        animals: sentAnimals,
+        tasks: chosenTasks,
         seeds: chosenSeeds.map((p) => ({ ...p, count: given[p.id] })),
       };
       await shareTransferFile(transferFileName(pick), await packItems(pick, includePhotos));
-      go({ kind: 'sent', ids: [...chosenPlants, ...chosenAnimals].map((i) => i.id), kept, given });
+      const ids = [...chosenPlants, ...chosenAnimals, ...chosenTasks].map((i) => i.id);
+      go({ kind: 'sent', ids, kept, keptAnimals, given });
     });
 
   const sendSync = () =>
@@ -188,12 +232,15 @@ export function TransferModal({
 
   const receive = (file: TransferFile) =>
     run(async () => {
-      if (file.plants.length || file.animals.length) await onImport(file.plants, file.animals);
+      if (file.plants.length || file.animals.length || file.tasks.length) {
+        await onImport(file.plants, [...file.animals, ...file.tasks]);
+      }
       if (file.seeds.length) await onImportSeeds(file.seeds);
       go({
         kind: 'received',
         plants: file.plants.length,
         animals: file.animals.length,
+        tasks: file.tasks.length,
         seeds: file.seeds.reduce((n, p) => n + p.count, 0),
       });
     });
@@ -222,20 +269,20 @@ export function TransferModal({
       body = (
         <>
           <Text style={styles.help}>
-            Move plants and animals to someone else's phone – with their whole history, tags and photos – share seeds
-            from your inventory, or sync with a phone you share the garden with.
+            Move plants, animals and maintenance tasks to someone else's phone – with their whole history, tags and
+            photos – share seeds from your inventory, or sync with a phone you share the garden with.
           </Text>
           <View style={styles.choiceRow}>
             <Choice
               emoji="📤"
               title="Send"
-              desc="Share plants, animals or seeds as a file"
+              desc="Share plants, animals, tasks or seeds as a file"
               onPress={() => go({ kind: 'send' })}
             />
             <Choice
               emoji="📥"
               title="Receive"
-              desc="Add plants, animals or seeds someone sent you"
+              desc="Add plants, animals, tasks or seeds someone sent you"
               onPress={() => go({ kind: 'receive', received: null })}
             />
           </View>
@@ -295,8 +342,49 @@ export function TransferModal({
               );
             })}
             {animals.length > 0 ? <Text style={styles.group}>🐾 Animals</Text> : null}
-            {animals.map((a) => (
-              <AnimalRow key={a.id} animal={a} checked={selected.includes(a.id)} onPress={() => toggle(a.id)} />
+            {animals.map((a) => {
+              const checked = selected.includes(a.id);
+              const give = animalGiveOf(a);
+              return (
+                <View key={a.id}>
+                  <AnimalRow animal={a} checked={checked} onPress={() => toggle(a.id)} />
+                  {checked && typeof give === 'number' && a.headCount > 1
+                    ? amountPicker(a.id, a.name, give, a.headCount, '')
+                    : null}
+                  {checked && typeof give !== 'number' && a.names.length > 1 ? (
+                    <View style={styles.amount}>
+                      <Text style={styles.amountLabel}>Which ones to give?</Text>
+                      <View style={styles.nameChips}>
+                        {a.names.map((n) => {
+                          const on = give.includes(n);
+                          return (
+                            <Pressable
+                              key={n}
+                              onPress={() => toggleName(a, n)}
+                              style={({ pressed }) => [styles.nameChip, on && styles.nameChipOn, pressed && styles.pressed]}
+                              accessibilityRole="checkbox"
+                              aria-checked={on}
+                            >
+                              <Text style={[styles.nameChipText, on && styles.nameChipTextOn]}>{n}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <Text style={styles.hint}>
+                        {give.length === 0
+                          ? 'Tick at least one'
+                          : give.length === a.names.length
+                            ? 'All of them'
+                            : `${joinNames(a.names.filter((n) => !give.includes(n)))} ${a.names.length - give.length === 1 ? 'stays' : 'stay'} with you`}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+            {tasks.length > 0 ? <Text style={styles.group}>🛠️ Maintenance</Text> : null}
+            {tasks.map((t) => (
+              <TaskRow key={t.id} task={t} checked={selected.includes(t.id)} onPress={() => toggle(t.id)} />
             ))}
             {packets.length > 0 ? <Text style={styles.group}>🌰 Seeds</Text> : null}
             {packets.map((p) => {
@@ -318,7 +406,7 @@ export function TransferModal({
           <Button
             label={busy ? 'Preparing…' : chosenCount > 1 ? `Send ${chosenCount} items` : 'Send'}
             onPress={send}
-            disabled={busy || chosenCount === 0}
+            disabled={busy || chosenCount === 0 || noNamesPicked}
           />
         </>
       );
@@ -326,9 +414,10 @@ export function TransferModal({
     }
 
     case 'sent': {
-      const { ids, kept, given } = step;
-      const whole = ids.filter((id) => !kept[id]);
+      const { ids, kept, keptAnimals, given } = step;
+      const whole = ids.filter((id) => !kept[id] && !keptAnimals[id]);
       const split = ids.filter((id) => kept[id]);
+      const splitAnimals = ids.filter((id) => keptAnimals[id]);
       const seedIds = Object.keys(given);
       const one = ids.length + seedIds.length === 1;
       const nameOf = (id: string) => items.find((i) => i.id === id)?.name;
@@ -353,6 +442,17 @@ export function TransferModal({
               </Text>
             ) : null;
           })}
+          {splitAnimals.map((id) => {
+            const left = keptAnimals[id];
+            return (
+              <Text key={id} style={[styles.hint, styles.spaced]}>
+                {nameOf(id)}:{' '}
+                {left.names.length
+                  ? `${joinNames(left.names)} ${left.names.length === 1 ? 'stays' : 'stay'} with you.`
+                  : `${left.headCount} will stay with you.`}
+              </Text>
+            );
+          })}
           {seedIds.map((id) => {
             const packet = seeds.find((p) => p.id === id);
             return packet ? (
@@ -364,7 +464,7 @@ export function TransferModal({
         </>
       );
       title = 'Sent?';
-      const onlyRemoves = split.length === 0 && seedIds.length === 0;
+      const onlyRemoves = split.length === 0 && splitAnimals.length === 0 && seedIds.length === 0;
       footer = (
         <>
           <Button label="Keep a copy" variant="secondary" onPress={onClose} />
@@ -373,6 +473,7 @@ export function TransferModal({
             variant={onlyRemoves ? 'danger' : 'primary'}
             onPress={() => {
               split.forEach((id) => onUpdateGrowth(id, kept[id]));
+              splitAnimals.forEach((id) => onKeepAnimals(id, keptAnimals[id]));
               if (whole.length) onRemove(whole);
               seedIds.forEach((id) => onTakeSeeds(id, given[id]));
               onClose();
@@ -481,8 +582,8 @@ export function TransferModal({
       } else {
         const file = step.received.file;
         const seedTotal = file.seeds.reduce((n, p) => n + p.count, 0);
-        const count = file.plants.length + file.animals.length + file.seeds.length;
-        const onlySeeds = file.plants.length === 0 && file.animals.length === 0;
+        const count = file.plants.length + file.animals.length + file.tasks.length + file.seeds.length;
+        const onlySeeds = count === file.seeds.length;
         if (onlySeeds) title = 'Receive seeds';
         body = (
           <ScrollView style={styles.list}>
@@ -495,6 +596,9 @@ export function TransferModal({
             ))}
             {file.animals.map((a, i) => (
               <AnimalRow key={`${a.id}-${i}`} animal={a} />
+            ))}
+            {file.tasks.map((t, i) => (
+              <TaskRow key={`${t.id}-${i}`} task={t} />
             ))}
             {file.seeds.map((p, i) => (
               <SeedRow key={`${p.id}-${i}`} packet={p} />
@@ -514,7 +618,9 @@ export function TransferModal({
                     : count === 1
                       ? file.plants.length
                         ? 'Add plant'
-                        : 'Add animals'
+                        : file.animals.length
+                          ? 'Add animals'
+                          : 'Add task'
                       : `Add ${count} items`
               }
               onPress={() => receive(file)}
@@ -526,13 +632,13 @@ export function TransferModal({
       break;
 
     case 'received': {
-      const { plants: p, animals: a, seeds: n } = step;
-      const one = p + a + n === 1;
+      const { plants: p, animals: a, tasks: t, seeds: n } = step;
+      const one = p + a + t + n === 1;
       title = 'Added';
       body = (
         <Text style={styles.help}>
-          ✅ {describe(p, a, n)} {one ? 'was' : 'were'} added
-          {p || a ? ` to your list${n ? ' and seed inventory' : ''}` : ' to your seed inventory'}. Let the sender know so
+          ✅ {describe(p, a, t, n)} {one ? 'was' : 'were'} added
+          {p || a || t ? ` to your list${n ? ' and seed inventory' : ''}` : ' to your seed inventory'}. Let the sender know so
           they can take {one ? 'it' : 'them'} off their phone.
         </Text>
       );
@@ -658,6 +764,39 @@ function AnimalRow({ animal, checked, onPress }: { animal: AnimalItem; checked?:
   );
 }
 
+function TaskRow({ task, checked, onPress }: { task: TaskItem; checked?: boolean; onPress?: () => void }) {
+  const content = (
+    <>
+      <Text style={styles.rowEmoji}>🛠️</Text>
+      <View style={styles.flex}>
+        <Text style={styles.rowName} numberOfLines={1}>
+          {task.name}
+        </Text>
+        <Text style={styles.rowDetail} numberOfLines={1}>
+          Every {plural(task.everyDays, 'day')}
+        </Text>
+      </View>
+      {onPress ? (
+        <View style={[styles.check, checked && styles.checkOn]}>
+          {checked ? <Text style={styles.checkMark}>✓</Text> : null}
+        </View>
+      ) : null}
+    </>
+  );
+  if (!onPress) return <View style={styles.row}>{content}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, checked && styles.rowOn, pressed && styles.pressed]}
+      accessibilityRole="checkbox"
+      aria-checked={checked}
+      accessibilityLabel={task.name}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
 function PlantRow({ plant, checked, onPress }: { plant: PlantItem; checked?: boolean; onPress?: () => void }) {
   const crop = plant.growth && findCrop(plant.growth.cropId);
   let detail = plant.growth ? growthStatus(plant.growth).headline : `Water every ${plant.waterEveryDays} days`;
@@ -752,6 +891,19 @@ const styles = StyleSheet.create({
   amountLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   selectAll: { alignSelf: 'flex-end', paddingVertical: 4, marginBottom: 8 },
   selectAllText: { fontSize: 15, fontWeight: '600', color: colors.primary },
+  nameChips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 4 },
+  nameChip: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  nameChipOn: { backgroundColor: colors.plant, borderColor: colors.plant },
+  nameChipText: { fontSize: 15, fontWeight: '600', color: colors.text },
+  nameChipTextOn: { color: colors.primaryText },
   group: { fontSize: 14, fontWeight: '700', color: colors.muted, marginTop: 14 },
   row: {
     flexDirection: 'row',

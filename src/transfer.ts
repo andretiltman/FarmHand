@@ -1,10 +1,10 @@
 import { photoToDataUrl } from './photoStorage';
 import { checkSnapshot, Deleted, isSnapshot, makeSnapshot, SyncSnapshot } from './sync';
-import { AnimalItem, Growth, PlantItem, PlantPhoto, SeedPacket, TrackedItem } from './types';
+import { AnimalItem, CareLog, Growth, PlantItem, PlantPhoto, SeedPacket, TaskItem, TrackedItem } from './types';
 
-/** Marks a file as FarmHand items (plants, animals and seeds), so we can tell it apart from any other JSON file. */
+/** Marks a file as FarmHand items (plants, animals, tasks and seeds), so we can tell it apart from any other JSON file. */
 const FORMAT = 'farmhand-plants';
-/** Version 1 files only held plants; version 2 added animals and seeds. */
+/** Version 1 files only held plants; version 2 added animals, tasks and seeds. */
 const VERSION = 2;
 
 /** A plant as it travels between phones: photos are embedded as data: URLs. */
@@ -16,6 +16,7 @@ export interface TransferFile {
   sentAt: string;
   plants: TransferPlant[];
   animals: AnimalItem[];
+  tasks: TaskItem[];
   /** `count` is how many seeds were given; packet photos are embedded as data: URLs. */
   seeds: SeedPacket[];
 }
@@ -24,6 +25,7 @@ export interface TransferFile {
 export interface TransferPick {
   plants: PlantItem[];
   animals: AnimalItem[];
+  tasks: TaskItem[];
   seeds: SeedPacket[];
 }
 
@@ -50,6 +52,43 @@ export function splitGrowth(g: Growth, give: number): { sent: Growth; kept: Grow
   };
 }
 
+/** Which of an animal entry's care logs are about the given animals, mentioning only them. */
+function logsFor(logs: CareLog[], names: string[]): CareLog[] {
+  return logs.flatMap((log) => {
+    if (!log.who) return [log];
+    const who = log.who.filter((n) => names.includes(n));
+    if (who.length === 0) return [];
+    return [who.length === names.length ? { date: log.date } : { ...log, who }];
+  });
+}
+
+/** What stays here when only some of an entry's animals are given away. */
+export type KeptAnimals = Pick<AnimalItem, 'headCount' | 'names'>;
+
+/**
+ * Splits animals off an entry: the named animals in `give`, or a number of them for unnamed animals.
+ * The sent copy keeps the history (only the care logged for the animals it holds); what stays here
+ * just has fewer animals.
+ */
+export function splitAnimal(animal: AnimalItem, give: string[] | number): { sent: AnimalItem; kept: KeptAnimals } {
+  if (typeof give === 'number') {
+    return { sent: { ...animal, headCount: give }, kept: { headCount: animal.headCount - give, names: [] } };
+  }
+  const rest = animal.names.filter((n) => !give.includes(n));
+  return {
+    sent: {
+      ...animal,
+      names: give,
+      headCount: give.length,
+      feedings: logsFor(animal.feedings, give),
+      walks: logsFor(animal.walks, give),
+      groomings: logsFor(animal.groomings, give),
+      rides: logsFor(animal.rides, give),
+    },
+    kept: { headCount: rest.length, names: rest },
+  };
+}
+
 /** Reads photos as data: URLs so they can travel inside a file, skipping any that can't be read. */
 async function embedPhotos(photos: PlantPhoto[]): Promise<PlantPhoto[]> {
   const embedded: PlantPhoto[] = [];
@@ -64,7 +103,7 @@ async function embedPhotos(photos: PlantPhoto[]): Promise<PlantPhoto[]> {
 }
 
 /**
- * Packs plants and animals (with their full history) and seeds (with `count` set to how many are given),
+ * Packs plants, animals and tasks (with their full history) and seeds (with `count` set to how many are given),
  * optionally with plant and packet photos, into a file's text.
  */
 export async function packItems(pick: TransferPick, includePhotos: boolean): Promise<string> {
@@ -79,10 +118,11 @@ export async function packItems(pick: TransferPick, includePhotos: boolean): Pro
   const file: TransferFile = {
     format: FORMAT,
     // Plants-only files stay readable by older versions of the app.
-    version: pick.animals.length || seeds.length ? VERSION : 1,
+    version: pick.animals.length || pick.tasks.length || seeds.length ? VERSION : 1,
     sentAt: new Date().toISOString(),
     plants,
     animals: pick.animals,
+    tasks: pick.tasks,
     seeds,
   };
   return JSON.stringify(file);
@@ -106,8 +146,11 @@ function checkItems(file: Partial<TransferFile>): TransferFile {
   const animals = (Array.isArray(file.animals) ? file.animals : []).filter(
     (a) => a && a.kind === 'animal' && typeof a.name === 'string' && typeof a.headCount === 'number',
   );
+  const tasks = (Array.isArray(file.tasks) ? file.tasks : []).filter(
+    (t) => t && t.kind === 'task' && typeof t.name === 'string' && typeof t.everyDays === 'number',
+  );
   const seeds = receivedSeeds(file.seeds);
-  if (plants.length + animals.length + seeds.length === 0) throw new Error("There's nothing to add in that file.");
+  if (plants.length + animals.length + tasks.length + seeds.length === 0) throw new Error("There's nothing to add in that file.");
   return {
     format: FORMAT,
     version: file.version ?? VERSION,
@@ -123,16 +166,17 @@ function checkItems(file: Partial<TransferFile>): TransferFile {
       species: typeof a.species === 'string' ? a.species : a.name,
       names: Array.isArray(a.names) ? a.names : [],
     })),
+    tasks: tasks.map((t) => ({ ...t, done: Array.isArray(t.done) ? t.done : [] })),
     seeds,
   };
 }
 
 /** e.g. "FarmHand - Tomato.farmhand.json", "FarmHand - 3 plants.farmhand.json" or "FarmHand - 5 items.farmhand.json". */
-export function transferFileName({ plants, animals, seeds }: TransferPick): string {
-  const total = plants.length + animals.length + seeds.length;
+export function transferFileName({ plants, animals, tasks, seeds }: TransferPick): string {
+  const total = plants.length + animals.length + tasks.length + seeds.length;
   const label =
     total === 1
-      ? [...plants, ...animals, ...seeds][0].name
+      ? [...plants, ...animals, ...tasks, ...seeds][0].name
       : total === plants.length
         ? `${total} plants`
         : total === seeds.length
@@ -181,7 +225,7 @@ const SEEDS_FORMAT = 'farmhand-seeds';
 
 export type Received = { kind: 'items'; file: TransferFile } | { kind: 'sync'; snapshot: SyncSnapshot };
 
-/** Works out whether a received file holds plants, animals or seeds to add, or a sync from another phone. */
+/** Works out whether a received file holds plants, animals, tasks or seeds to add, or a sync from another phone. */
 export function unpackReceived(text: string): Received {
   let data: unknown;
   try {
@@ -192,7 +236,7 @@ export function unpackReceived(text: string): Received {
   if (isSnapshot(data)) return { kind: 'sync', snapshot: checkSnapshot(data) };
   const file = data as (Omit<Partial<TransferFile>, 'format'> & { format?: string }) | null;
   if (file?.format === SEEDS_FORMAT) {
-    return { kind: 'items', file: checkItems({ ...file, format: FORMAT, version: undefined, plants: [], animals: [] }) };
+    return { kind: 'items', file: checkItems({ ...file, format: FORMAT, version: undefined, plants: [], animals: [], tasks: [] }) };
   }
   if (!file || file.format !== FORMAT) throw new Error("That file isn't from FarmHand.");
   return { kind: 'items', file: checkItems({ ...file, format: FORMAT }) };
