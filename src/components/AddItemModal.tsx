@@ -25,6 +25,8 @@ interface Props {
   /** Seeds on hand, so sowing can show and take from what's left. */
   seeds: SeedPacket[];
   onTakeSeeds: (packetId: string, count: number) => void;
+  /** Opens the seed inventory to add a packet. */
+  onAddSeeds: () => void;
 }
 
 type Step = 'kind' | 'crop' | 'details' | 'review';
@@ -52,7 +54,7 @@ const TASK_INTERVALS: { days: number; label: string }[] = [
   { days: 365, label: 'Yearly' },
 ];
 
-export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds }: Props) {
+export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onAddSeeds }: Props) {
   const [step, setStep] = useState<Step>('kind');
   const [kind, setKind] = useState<ItemKind | null>(null);
   const [name, setName] = useState('');
@@ -247,6 +249,14 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds }: P
             soft={colors.taskSoft}
             onPress={() => chooseKind('task')}
           />
+          <KindOption
+            emoji="🌰"
+            title="Seeds"
+            description="Packets on hand, ready to sow or share"
+            color={colors.plant}
+            soft={colors.plantSoft}
+            onPress={onAddSeeds}
+          />
         </View>
       )}
 
@@ -392,7 +402,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds }: P
                 </>
               ) : (
                 <Text style={styles.hint}>
-                  🌰 No {crop.name.toLowerCase()} seeds in your inventory – add some with the 🌰 button on the home screen.
+                  🌰 No {crop.name.toLowerCase()} seeds in your inventory – add some with ＋ Add → Seeds.
                 </Text>
               )}
             </>

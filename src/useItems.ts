@@ -173,8 +173,9 @@ export function useItems() {
   const removeItem = useCallback((id: string) => removeItems([id]), [removeItems]);
 
   /** Adds plants received from another phone as copies, with new ids so they never clash with plants already here. */
-  const importPlants = useCallback(async (plants: TransferPlant[]) => {
-    const added: PlantItem[] = [];
+  /** Adds plants, animals and tasks someone sent, as new entries (with plant photos saved to this phone). */
+  const importItems = useCallback(async (plants: TransferPlant[], others: (AnimalItem | TaskItem)[]) => {
+    const added: TrackedItem[] = [];
     for (const plant of plants) {
       const photos: PlantPhoto[] = [];
       for (const photo of plant.photos) {
@@ -188,7 +189,11 @@ export function useItems() {
       }
       // A copy is a new plant, so it starts without the sender's sync history.
       const { changed: _changed, removed: _removed, ...rest } = plant;
-      added.push(migrate({ ...rest, id: newId(), photos }) as PlantItem);
+      added.push(migrate({ ...rest, id: newId(), photos }));
+    }
+    for (const item of others) {
+      const { changed: _changed, removed: _removed, ...rest } = item;
+      added.push(migrate({ ...rest, id: newId() }));
     }
     setItems((prev) => [...added, ...prev]);
   }, []);
@@ -354,6 +359,13 @@ export function useItems() {
     [updateAnimal],
   );
 
+  /** Leaves fewer animals in an entry, after some were given away. */
+  const keepAnimals = useCallback(
+    (id: string, kept: Pick<AnimalItem, 'headCount' | 'names'>) =>
+      updateAnimal(id, (a) => stamp({ ...a, ...kept }, 'names', 'headCount')),
+    [updateAnimal],
+  );
+
   const setCareEvery = useCallback(
     (id: string, kind: CareKind, days: number) =>
       updateAnimal(id, (a) => stamp({ ...a, careEvery: { ...a.careEvery, [kind]: days } }, 'careEvery')),
@@ -387,7 +399,7 @@ export function useItems() {
     addItem,
     removeItem,
     removeItems,
-    importPlants,
+    importItems,
     applySnapshot,
     renameItem,
     setTags,
@@ -398,6 +410,7 @@ export function useItems() {
     setCare,
     setCareEvery,
     setNames,
+    keepAnimals,
     completeTask,
     setTaskEvery,
     advanceStage,
