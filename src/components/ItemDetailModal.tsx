@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CARE, careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
-import { formatDateTime } from '../dates';
+import { formatDateTime, relativeDay } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
 import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
-import { Growth, TrackedItem } from '../types';
+import { CareKind, Growth, TrackedItem } from '../types';
 import { Button } from './Button';
+import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { MilestoneEditor } from './MilestoneEditor';
@@ -22,7 +24,9 @@ interface Props {
   onClose: () => void;
   onWater: (id: string) => void;
   onLogEggs: (id: string, count: number) => void;
-  onFeed: (id: string) => void;
+  onCare: (id: string, kind: CareKind) => void;
+  onSetCare: (id: string, care: CareKind[], tracksEggs: boolean) => void;
+  onSetCareEvery: (id: string, kind: CareKind, days: number) => void;
   onCompleteTask: (id: string) => void;
   onSetTaskEvery: (id: string, days: number) => void;
   onAdvance: (id: string, action: StageAction) => void;
@@ -45,7 +49,7 @@ type View_ =
   | { kind: 'rename' };
 
 export function ItemDetailModal(props: Props) {
-  const { item, onClose, onWater, onLogEggs, onFeed, onAdvance, onUndo, onDelete } = props;
+  const { item, onClose, onWater, onLogEggs, onCare, onAdvance, onUndo, onDelete } = props;
   const [eggCount, setEggCount] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -68,7 +72,7 @@ export function ItemDetailModal(props: Props) {
   let stats: { label: string; value: string }[];
   let history: { key: string; date: string; text: string; undoable: boolean }[];
   let subtitle = isPlant ? 'Plant' : item.kind === 'task' ? 'Maintenance' : '';
-  let icon = isPlant ? '🪴' : item.kind === 'task' ? '🛠️' : '🐔';
+  let icon = isPlant ? '🪴' : item.kind === 'task' ? '🛠️' : speciesEmoji(item.species);
   const growth = item.kind === 'plant' ? item.growth : undefined;
   const status = growth && growthStatus(growth);
   const crop = growth && findCrop(growth.cropId);
@@ -122,13 +126,18 @@ export function ItemDetailModal(props: Props) {
   } else {
     subtitle = `${item.headCount} × ${item.species}`;
     const s = animalSummary(item);
-    stats = [
-      { label: 'Last fed', value: s.lastFedLabel.replace(/^Fed /, '') },
-      { label: 'Eggs today', value: String(s.today) },
-      { label: 'Eggs / week', value: String(s.last7Days) },
-      { label: 'Eggs total', value: String(s.total) },
-    ];
-    // Feedings and egg logs share one timeline, newest first.
+    stats = careStatuses(item).map((c) => ({
+      label: `Last ${c.job.past.toLowerCase()}`,
+      value: c.last ? capitalize(relativeDay(c.last)) : 'Never',
+    }));
+    if (item.tracksEggs) {
+      stats.push(
+        { label: 'Eggs today', value: String(s.today) },
+        { label: 'Eggs / week', value: String(s.last7Days) },
+        { label: 'Eggs total', value: String(s.total) },
+      );
+    }
+    // Care and egg logs share one timeline, newest first. Jobs no longer tracked still show their history.
     history = [
       ...item.eggs.map((e, i) => ({
         key: `egg-${e.date}-${i}`,
@@ -136,12 +145,14 @@ export function ItemDetailModal(props: Props) {
         text: `🥚  ${e.count} egg${e.count === 1 ? '' : 's'} · ${formatDateTime(e.date)}`,
         undoable: true,
       })),
-      ...item.feedings.map((d, i) => ({
-        key: `feed-${d}-${i}`,
-        date: d,
-        text: `🌾  Fed · ${formatDateTime(d)}`,
-        undoable: true,
-      })),
+      ...Object.values(CARE).flatMap((job) =>
+        item[job.field].map((d, i) => ({
+          key: `${job.field}-${d}-${i}`,
+          date: d,
+          text: `${job.emoji}  ${job.past} · ${formatDateTime(d)}`,
+          undoable: true,
+        })),
+      ),
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }
 
@@ -411,6 +422,19 @@ export function ItemDetailModal(props: Props) {
           </View>
         )}
 
+        {item.kind === 'animal' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Looking after</Text>
+            <CarePicker
+              care={item.care}
+              careEvery={item.careEvery}
+              tracksEggs={item.tracksEggs}
+              onChange={(care, tracksEggs) => props.onSetCare(item.id, care, tracksEggs)}
+              onChangeEvery={(kind, days) => props.onSetCareEvery(item.id, kind, days)}
+            />
+          </View>
+        )}
+
         {item.kind === 'task' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Repeat every</Text>
@@ -424,7 +448,7 @@ export function ItemDetailModal(props: Props) {
         )}
 
         <View style={styles.stats}>
-          {stats.map((s) => (
+          {stats.slice(0, 4).map((s) => (
             <View key={s.label} style={styles.stat}>
               <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
                 {s.value}
@@ -433,6 +457,18 @@ export function ItemDetailModal(props: Props) {
             </View>
           ))}
         </View>
+        {stats.length > 4 && (
+          <View style={[styles.stats, styles.statsMore]}>
+            {stats.slice(4).map((s) => (
+              <View key={s.label} style={styles.stat}>
+                <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+                  {s.value}
+                </Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {isPlant ? (
           <View style={styles.actionRow}>
@@ -444,22 +480,33 @@ export function ItemDetailModal(props: Props) {
           </View>
         ) : (
           <>
-            <View style={styles.actionRow}>
-              <Button label="🌾  Fed now" color={colors.plant} onPress={() => onFeed(item.id)} />
-            </View>
-            <View style={styles.eggRow}>
-              <Stepper label="Eggs collected" value={eggCount} onChange={setEggCount} max={200} suffix="eggs" />
-              <View style={styles.eggBtn}>
-                <Button
-                  label="Log"
-                  color={colors.animal}
-                  onPress={() => {
-                    onLogEggs(item.id, eggCount);
-                    setEggCount(1);
-                  }}
-                />
+            {item.care.length > 0 && (
+              <View style={[styles.actionRow, styles.careRow]}>
+                {careStatuses(item).map((c) => (
+                  <Button
+                    key={c.kind}
+                    label={item.care.length === 1 ? `${c.job.emoji}  ${c.job.past} now` : `${c.job.emoji} ${c.job.verb}`}
+                    color={colors.plant}
+                    onPress={() => onCare(item.id, c.kind)}
+                  />
+                ))}
               </View>
-            </View>
+            )}
+            {item.tracksEggs && (
+              <View style={styles.eggRow}>
+                <Stepper label="Eggs collected" value={eggCount} onChange={setEggCount} max={200} suffix="eggs" />
+                <View style={styles.eggBtn}>
+                  <Button
+                    label="Log"
+                    color={colors.animal}
+                    onPress={() => {
+                      onLogEggs(item.id, eggCount);
+                      setEggCount(1);
+                    }}
+                  />
+                </View>
+              </View>
+            )}
           </>
         )}
 
@@ -478,7 +525,7 @@ export function ItemDetailModal(props: Props) {
                 ? 'No waterings logged yet.'
                 : item.kind === 'task'
                   ? 'Not done yet.'
-                  : 'No feedings or eggs logged yet.'}
+                  : 'Nothing logged yet.'}
             </Text>
           ) : (
             history.map((h) => (
@@ -492,6 +539,8 @@ export function ItemDetailModal(props: Props) {
     </Sheet>
   );
 }
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /** "Now", "Today", "In 3d" or "2d late". */
 function dueValue(s: DueSummary): string {
@@ -532,6 +581,7 @@ const styles = StyleSheet.create({
   guideToggle: { fontSize: 15, fontWeight: '600', color: colors.water, marginTop: 16, marginBottom: 8 },
   growthNote: { fontSize: 13, color: colors.muted, marginTop: 4, textAlign: 'center' },
   stats: { flexDirection: 'row', gap: 8 },
+  statsMore: { marginTop: 8 },
   stat: {
     flex: 1,
     backgroundColor: colors.background,
@@ -543,6 +593,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 16, fontWeight: '700', color: colors.text },
   statLabel: { fontSize: 12, color: colors.muted, marginTop: 2, textAlign: 'center' },
   actionRow: { flexDirection: 'row', marginTop: 16 },
+  careRow: { gap: 8 },
   eggRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 12 },
   eggBtn: { flex: 1, flexDirection: 'row' },
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, marginBottom: 8 },

@@ -1,12 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { CARE, CareJob } from './care';
 import { StageAction } from './growth';
 import { newId } from './ids';
 import { deletePhoto, saveDataUrlPhoto, savePhoto } from './photoStorage';
 import { Deleted, markRemoved, mergeSnapshot, MergeResult, removedKey, stamp, SyncSnapshot } from './sync';
 import { TransferPlant } from './transfer';
-import { AnimalItem, Growth, NewItem, PlantItem, PlantPhoto, TaskItem, TrackedItem } from './types';
+import { AnimalItem, CareKind, Growth, NewItem, PlantItem, PlantPhoto, TaskItem, TrackedItem } from './types';
 
 const STORAGE_KEY = 'farmhand.items.v1';
 /** Ids of deleted items, so syncing with another phone doesn't bring them back. */
@@ -16,7 +17,18 @@ const DELETED_KEY = 'farmhand.deleted.v1';
 function migrate(item: TrackedItem): TrackedItem {
   switch (item.kind) {
     case 'animal':
-      return { ...item, eggs: item.eggs ?? [], feedings: item.feedings ?? [] };
+      // Animals added before care jobs were tracked were all poultry: feeding and eggs.
+      return {
+        ...item,
+        care: item.care ?? ['feed'],
+        careEvery: item.careEvery ?? {},
+        tracksEggs: item.tracksEggs ?? true,
+        eggs: item.eggs ?? [],
+        feedings: item.feedings ?? [],
+        walks: item.walks ?? [],
+        groomings: item.groomings ?? [],
+        rides: item.rides ?? [],
+      };
     case 'plant':
       return { ...item, waterings: item.waterings ?? [], photos: item.photos ?? [], tags: item.tags ?? [] };
     case 'task':
@@ -48,14 +60,20 @@ function undoPlant(plant: PlantItem): PlantItem {
   return stamp({ ...plant, growth }, 'growth');
 }
 
-/** Removes the newest feeding or egg collection from an animal. */
+/** Removes the newest feeding, walk, grooming, ride or egg collection from an animal. */
 function undoAnimal(animal: AnimalItem): AnimalItem {
   const lastEgg = animal.eggs[0]?.date ?? '';
-  const lastFeed = animal.feedings[0] ?? '';
-  if (!lastEgg && !lastFeed) return animal;
-  return lastFeed > lastEgg
-    ? markRemoved({ ...animal, feedings: animal.feedings.slice(1) }, removedKey.log('feedings', lastFeed))
-    : markRemoved({ ...animal, eggs: animal.eggs.slice(1) }, removedKey.egg(lastEgg));
+  let newest: { date: string; field: CareJob['field'] } | null = null;
+  for (const { field } of Object.values(CARE)) {
+    const date = animal[field][0];
+    if (date && (!newest || date > newest.date)) newest = { date, field };
+  }
+  if (!lastEgg && !newest) return animal;
+  if (newest && newest.date > lastEgg) {
+    const { field, date } = newest;
+    return markRemoved({ ...animal, [field]: animal[field].slice(1) }, removedKey.log(field, date));
+  }
+  return markRemoved({ ...animal, eggs: animal.eggs.slice(1) }, removedKey.egg(lastEgg));
 }
 
 function undoTask(task: TaskItem): TaskItem {
@@ -120,13 +138,18 @@ export function useItems() {
     [update],
   );
 
+  const updateAnimal = useCallback(
+    (id: string, change: (animal: AnimalItem) => AnimalItem) => update(id, (i) => (i.kind === 'animal' ? change(i) : i)),
+    [update],
+  );
+
   const addItem = useCallback((input: NewItem) => {
     const base = { id: newId(), createdAt: new Date().toISOString() };
     const item: TrackedItem =
       input.kind === 'plant'
         ? { ...input, ...base, waterings: [], photos: [] }
         : input.kind === 'animal'
-          ? { ...input, ...base, eggs: [], feedings: [] }
+          ? { ...input, ...base, eggs: [], feedings: [], walks: [], groomings: [], rides: [] }
           : { ...input, ...base };
     setItems((prev) => [item, ...prev]);
   }, []);
@@ -292,17 +315,32 @@ export function useItems() {
     (id: string, count: number) => {
       if (count <= 0) return;
       const entry = { date: new Date().toISOString(), count };
-      update(id, (i) => (i.kind === 'animal' ? { ...i, eggs: [entry, ...i.eggs] } : i));
+      updateAnimal(id, (a) => ({ ...a, eggs: [entry, ...a.eggs] }));
     },
-    [update],
+    [updateAnimal],
   );
 
-  const feedAnimal = useCallback(
-    (id: string) => {
+  /** Logs a feeding, walk, grooming or ride as of now. */
+  const logCare = useCallback(
+    (id: string, kind: CareKind) => {
       const now = new Date().toISOString();
-      update(id, (i) => (i.kind === 'animal' ? { ...i, feedings: [now, ...i.feedings] } : i));
+      const { field } = CARE[kind];
+      updateAnimal(id, (a) => ({ ...a, [field]: [now, ...a[field]] }));
     },
-    [update],
+    [updateAnimal],
+  );
+
+  /** Changes which jobs are tracked for an animal, and whether it lays eggs. */
+  const setCare = useCallback(
+    (id: string, care: CareKind[], tracksEggs: boolean) =>
+      updateAnimal(id, (a) => stamp({ ...a, care, tracksEggs }, 'care', 'tracksEggs')),
+    [updateAnimal],
+  );
+
+  const setCareEvery = useCallback(
+    (id: string, kind: CareKind, days: number) =>
+      updateAnimal(id, (a) => stamp({ ...a, careEvery: { ...a.careEvery, [kind]: days } }, 'careEvery')),
+    [updateAnimal],
   );
 
   /** Confirms a growth milestone (sprouted / transplanted / harvested) as of now. */
@@ -339,7 +377,9 @@ export function useItems() {
     setWaterEvery,
     waterPlant,
     logEggs,
-    feedAnimal,
+    logCare,
+    setCare,
+    setCareEvery,
     completeTask,
     setTaskEvery,
     advanceStage,

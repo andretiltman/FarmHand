@@ -41,7 +41,9 @@ function HomeScreen() {
     setWaterEvery,
     waterPlant,
     logEggs,
-    feedAnimal,
+    logCare,
+    setCare,
+    setCareEvery,
     completeTask,
     setTaskEvery,
     advanceStage,
@@ -185,7 +187,7 @@ function HomeScreen() {
               item={item}
               onPress={() => setSelectedId(item.id)}
               onWater={() => waterPlant(item.id)}
-              onFeed={() => feedAnimal(item.id)}
+              onCare={(kind) => logCare(item.id, kind)}
               onEgg={() => logEggs(item.id, 1)}
               onDone={() => completeTask(item.id)}
             />
@@ -248,7 +250,9 @@ function HomeScreen() {
         onClose={() => setSelectedId(null)}
         onWater={waterPlant}
         onLogEggs={logEggs}
-        onFeed={feedAnimal}
+        onCare={logCare}
+        onSetCare={setCare}
+        onSetCareEvery={setCareEvery}
         onCompleteTask={completeTask}
         onSetTaskEvery={setTaskEvery}
         onAdvance={advanceStage}

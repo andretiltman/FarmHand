@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CARE, findSpecies, SPECIES_PRESETS, SpeciesPreset, speciesEmoji } from '../care';
 import { CROPS, Crop, findCrop } from '../crops';
 import { addDays, approxDays, formatShortDate, plural } from '../dates';
 import { growthStatus } from '../growth';
 import { sowingAdvice } from '../seasons';
 import { colors, radius } from '../theme';
-import { Growth, ItemKind, NewItem, SowMethod } from '../types';
+import { CareKind, Growth, ItemKind, NewItem, SowMethod } from '../types';
 import { Button } from './Button';
+import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { Sheet } from './Sheet';
@@ -28,7 +30,6 @@ const SHORT_STEPS: Step[] = ['kind', 'details', 'review'];
 const OTHER = 'other';
 
 const WATER_PRESETS = [1, 2, 3, 7, 14];
-const SPECIES_PRESETS = ['Chicken', 'Duck', 'Quail'];
 /** Common maintenance jobs and how often they're usually done. */
 const TASK_PRESETS: { name: string; everyDays: number }[] = [
   { name: 'Septic tank bio enzymes', everyDays: 30 },
@@ -58,6 +59,9 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [species, setSpecies] = useState('Chicken');
   const [headCount, setHeadCount] = useState(1);
+  const [care, setCare] = useState<CareKind[]>(SPECIES_PRESETS[0].care);
+  const [careEvery, setCareEvery] = useState<Partial<Record<CareKind, number>>>({});
+  const [tracksEggs, setTracksEggs] = useState(true);
   const [everyDays, setEveryDays] = useState(30);
   /** Days since the task was last done; null when it hasn't been done yet. */
   const [lastDoneDaysAgo, setLastDoneDaysAgo] = useState<number | null>(null);
@@ -76,6 +80,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       setTags([]);
       setSpecies('Chicken');
       setHeadCount(1);
+      chooseSpecies(SPECIES_PRESETS[0]);
       setEveryDays(30);
       setLastDoneDaysAgo(null);
     }
@@ -119,6 +124,14 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
     setStep('details');
   };
 
+  /** Picks a type of animal, with the jobs it usually needs. */
+  function chooseSpecies(p: SpeciesPreset) {
+    setSpecies(p.name);
+    setCare(p.care);
+    setCareEvery(p.careEvery);
+    setTracksEggs(p.tracksEggs);
+  }
+
   const lastDoneAt = lastDoneDaysAgo === null ? null : addDays(new Date(), -lastDoneDaysAgo);
   const nextDue = lastDoneAt ? addDays(lastDoneAt, everyDays) : new Date();
 
@@ -128,7 +141,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       kind === 'plant'
         ? { kind, name: trimmedName, waterEveryDays, growth, tags }
         : kind === 'animal'
-          ? { kind, name: trimmedName, species: trimmedSpecies, headCount }
+          ? { kind, name: trimmedName, species: trimmedSpecies, headCount, care, careEvery, tracksEggs }
           : { kind, name: trimmedName, everyDays, done: lastDoneAt ? [lastDoneAt.toISOString()] : [] },
     );
     onClose();
@@ -194,7 +207,7 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
           <KindOption
             emoji="🐔"
             title="Animal"
-            description="Track chickens, feeding and eggs"
+            description="Chickens, dogs, horses – feeding, walks, grooming, rides and eggs"
             color={colors.animal}
             soft={colors.animalSoft}
             onPress={() => chooseKind('animal')}
@@ -253,7 +266,13 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder={isPlant ? 'e.g. Fern by the window' : isTask ? 'e.g. Septic tank bio enzymes' : 'e.g. The Girls'}
+            placeholder={
+              isPlant
+                ? 'e.g. Fern by the window'
+                : isTask
+                  ? 'e.g. Septic tank bio enzymes'
+                  : `e.g. ${findSpecies(species)?.example ?? 'The Girls'}`
+            }
             placeholderTextColor={colors.muted}
             style={styles.input}
             autoFocus={!crop && !isTask}
@@ -417,13 +436,13 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
             <>
               <Text style={styles.label}>Type of animal</Text>
               <View style={styles.chips}>
-                {SPECIES_PRESETS.map((s) => (
+                {SPECIES_PRESETS.map((p) => (
                   <Chip
-                    key={s}
-                    label={s}
-                    selected={species === s}
+                    key={p.name}
+                    label={`${p.emoji} ${p.name}`}
+                    selected={species === p.name}
                     color={colors.animal}
-                    onPress={() => setSpecies(s)}
+                    onPress={() => chooseSpecies(p)}
                   />
                 ))}
               </View>
@@ -437,6 +456,17 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
               />
               <Text style={styles.label}>How many?</Text>
               <Stepper label="Number of animals" value={headCount} onChange={setHeadCount} max={999} />
+              <Text style={styles.label}>What do they need?</Text>
+              <CarePicker
+                care={care}
+                careEvery={careEvery}
+                tracksEggs={tracksEggs}
+                onChange={(c, eggs) => {
+                  setCare(c);
+                  setTracksEggs(eggs);
+                }}
+                onChangeEvery={(k, d) => setCareEvery((prev) => ({ ...prev, [k]: d }))}
+              />
             </>
           )}
         </ScrollView>
@@ -445,7 +475,9 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
       {step === 'review' && (
         <ScrollView style={styles.shrink}>
           <View style={[styles.review, { borderColor: accent }]}>
-            <Text style={styles.reviewEmoji}>{isPlant ? (crop?.emoji ?? '🪴') : isTask ? '🛠️' : '🐔'}</Text>
+            <Text style={styles.reviewEmoji}>
+              {isPlant ? (crop?.emoji ?? '🪴') : isTask ? '🛠️' : speciesEmoji(trimmedSpecies)}
+            </Text>
             <Text style={styles.reviewName}>{trimmedName}</Text>
             <Text style={styles.reviewDetail}>
               {isPlant
@@ -462,7 +494,15 @@ export function AddItemModal({ visible, onClose, onSave }: Props) {
                       `every ${plural(everyDays, 'day')}`,
                       lastDoneAt ? `last done ${formatShortDate(lastDoneAt)}` : 'not done yet',
                     ].join(' · ')
-                  : `${headCount} × ${trimmedSpecies} · feeding & egg tracking`}
+                  : [
+                      `${headCount} × ${trimmedSpecies}`,
+                      ...care.map(
+                        (k) => `${CARE[k].verb.toLowerCase()} every ${plural(careEvery[k] ?? CARE[k].everyDays, 'day')}`,
+                      ),
+                      tracksEggs && 'egg tracking',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
             </Text>
             {isTask && (
               <Text style={[styles.reviewHeadline, { color: colors.task }]}>

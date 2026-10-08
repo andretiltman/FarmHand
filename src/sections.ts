@@ -1,5 +1,6 @@
+import { careStatuses } from './care';
 import { growthStatus } from './growth';
-import { animalSummary, plantSummary, taskSummary } from './stats';
+import { plantSummary, taskSummary } from './stats';
 import { TrackedItem } from './types';
 
 export type SectionKey = 'overview' | 'all' | 'sown' | 'seedlings' | 'plants' | 'animals' | 'maintenance';
@@ -14,9 +15,9 @@ export interface Section {
   includes: (item: TrackedItem, now: Date) => boolean;
 }
 
-/** True when the item needs watering, transplanting, feeding, harvesting or a maintenance task is due. */
+/** True when a plant needs watering, transplanting or harvesting, an animal is due a feed, walk, … or a task is due. */
 export function needsAttention(item: TrackedItem, now: Date = new Date()): boolean {
-  if (item.kind === 'animal') return !animalSummary(item, now).fedToday;
+  if (item.kind === 'animal') return careStatuses(item, now).some((c) => c.status !== 'ok');
   if (item.kind === 'task') return taskSummary(item, now).status !== 'ok';
   const g = item.growth ? growthStatus(item.growth, now) : null;
   if (g?.stage === 'harvested') return false;
@@ -34,7 +35,7 @@ export const sections: Section[] = [
     label: 'Overview',
     emoji: '⭐',
     emptyTitle: 'All caught up',
-    emptyText: 'Nothing needs watering, transplanting, feeding, harvesting or maintenance right now.',
+    emptyText: 'Nothing needs watering, transplanting, harvesting, feeding, walking, grooming or maintenance right now.',
     includes: needsAttention,
   },
   {
@@ -42,7 +43,7 @@ export const sections: Section[] = [
     label: 'All',
     emoji: '📋',
     emptyTitle: 'Nothing tracked yet',
-    emptyText: 'Tap “Add” below to start tracking a plant, your chickens or a maintenance job.',
+    emptyText: 'Tap “Add” below to start tracking a plant, your animals or a maintenance job.',
     includes: () => true,
   },
   {
@@ -76,9 +77,9 @@ export const sections: Section[] = [
   {
     key: 'animals',
     label: 'Animals',
-    emoji: '🐔',
+    emoji: '🐾',
     emptyTitle: 'No animals yet',
-    emptyText: 'Tap “Add” below to start tracking your chickens.',
+    emptyText: 'Tap “Add” below to start tracking your chickens, dogs or horses.',
     includes: (item) => item.kind === 'animal',
   },
   {

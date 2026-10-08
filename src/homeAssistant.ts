@@ -1,3 +1,4 @@
+import { careEvery, careStatuses } from './care';
 import { findCrop } from './crops';
 import { growthStatus, transplantSuccess } from './growth';
 import { animalSummary, plantSummary, taskSummary } from './stats';
@@ -115,24 +116,45 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
       });
     } else {
       const s = animalSummary(item, now);
-      eggsToday += s.today;
-      sensors.push({
-        entityId,
-        state: s.today,
-        attributes: {
-          friendly_name: item.name,
-          icon: 'mdi:egg',
-          kind: 'animal',
-          unit_of_measurement: 'eggs',
-          state_class: 'measurement',
-          species: item.species,
-          head_count: item.headCount,
-          eggs_last_7_days: s.last7Days,
-          eggs_total: s.total,
-          fed_today: s.fedToday,
-          last_fed: item.feedings[0] ?? null,
-        },
-      });
+      const care = careStatuses(item, now);
+      const due = care.filter((c) => c.status !== 'ok');
+      // e.g. walk_status: 'due', last_walked: '2026-…', walk_every_days: 1
+      const careAttributes = Object.fromEntries(
+        care.flatMap((c) => [
+          [`${c.kind}_status`, c.status],
+          [`last_${c.job.past.toLowerCase()}`, c.last ?? null],
+          [`${c.kind}_every_days`, careEvery(item, c.kind)],
+        ]),
+      );
+      const attributes = {
+        friendly_name: item.name,
+        kind: 'animal',
+        species: item.species,
+        head_count: item.headCount,
+        needs_care: due.map((c) => c.kind).join(', '),
+        fed_today: s.fedToday,
+        last_fed: item.feedings[0] ?? null,
+        ...careAttributes,
+      };
+      if (item.tracksEggs) {
+        eggsToday += s.today;
+        sensors.push({
+          entityId,
+          state: s.today,
+          attributes: {
+            ...attributes,
+            icon: 'mdi:egg',
+            unit_of_measurement: 'eggs',
+            state_class: 'measurement',
+            eggs_last_7_days: s.last7Days,
+            eggs_total: s.total,
+          },
+        });
+      } else {
+        // Animals that don't lay report the most pressing of their jobs, like tasks and plants do.
+        const worst = (['overdue', 'due', 'never'] as const).find((st) => due.some((c) => c.status === st)) ?? 'ok';
+        sensors.push({ entityId, state: worst, attributes: { ...attributes, icon: 'mdi:paw' } });
+      }
     }
   }
 
