@@ -84,6 +84,8 @@ export function splitAnimal(animal: AnimalItem, give: string[] | number): { sent
       walks: logsFor(animal.walks, give),
       groomings: logsFor(animal.groomings, give),
       rides: logsFor(animal.rides, give),
+      // The coop or stable was cleaned for all of them.
+      cleanings: animal.cleanings,
     },
     kept: { headCount: rest.length, names: rest },
   };

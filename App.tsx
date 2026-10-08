@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { asksWho } from './src/care';
 import { AddItemModal } from './src/components/AddItemModal';
 import { HomeAssistantModal } from './src/components/HomeAssistantModal';
 import { ItemCard } from './src/components/ItemCard';
@@ -202,7 +203,7 @@ function HomeScreen() {
               }}
               onWater={() => waterPlant(item.id)}
               onCare={(kind) => {
-                if (item.kind === 'animal' && item.names.length > 1) {
+                if (item.kind === 'animal' && asksWho(item, kind)) {
                   setStartCare(kind);
                   setSelectedId(item.id);
                 } else logCare(item.id, kind);

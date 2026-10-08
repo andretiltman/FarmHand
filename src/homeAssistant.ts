@@ -1,4 +1,4 @@
-import { careEvery, careStatuses } from './care';
+import { CARE, careEvery, careStatuses } from './care';
 import { findCrop } from './crops';
 import { growthStatus, transplantSuccess } from './growth';
 import { animalSummary, plantSummary, taskSummary } from './stats';
@@ -122,7 +122,7 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
       const careAttributes = Object.fromEntries(
         care.flatMap((c) => [
           [`${c.kind}_status`, c.status],
-          [`last_${c.job.past.toLowerCase()}`, c.last ?? null],
+          [`last_${CARE[c.kind].past.toLowerCase()}`, c.last ?? null],
           [`${c.kind}_every_days`, careEvery(item, c.kind)],
         ]),
       );

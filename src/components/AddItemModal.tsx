@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { CARE, findSpecies, joinNames, SPECIES_PRESETS, SpeciesPreset, speciesEmoji } from '../care';
+import { CARE, careJob, findSpecies, joinNames, SPECIES_PRESETS, SpeciesPreset, speciesEmoji } from '../care';
 import { CROPS, Crop, findCrop } from '../crops';
 import { addDays, approxDays, formatShortDate, plural } from '../dates';
 import { growthStatus } from '../growth';
@@ -232,7 +232,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
           <KindOption
             emoji="🐔"
             title="Animal"
-            description="Chickens, dogs, horses, snakes – feeding, walks, grooming, rides and eggs"
+            description="Chickens, dogs, horses, snakes – feeding, walks, grooming, rides, mucking out and eggs"
             color={colors.animal}
             soft={colors.animalSoft}
             onPress={() => chooseKind('animal')}
@@ -575,7 +575,8 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
                   : [
                       names.length ? `${trimmedSpecies}: ${joinNames(names)}` : `${headCount} × ${trimmedSpecies}`,
                       ...care.map(
-                        (k) => `${CARE[k].verb.toLowerCase()} every ${plural(careEvery[k] ?? CARE[k].everyDays, 'day')}`,
+                        (k) =>
+                          `${careJob(trimmedSpecies, k).verb.toLowerCase()} every ${plural(careEvery[k] ?? CARE[k].everyDays, 'day')}`,
                       ),
                       tracksEggs && 'egg tracking',
                     ]

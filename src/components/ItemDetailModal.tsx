@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { CARE, careLogText, careStatuses, speciesEmoji } from '../care';
+import { asksWho, CARE, CARE_KINDS, careJob, careLogText, careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
 import { formatDateTime, relativeDay } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
@@ -155,7 +155,7 @@ export function ItemDetailModal(props: Props) {
         text: `🥚  ${e.count} egg${e.count === 1 ? '' : 's'} · ${formatDateTime(e.date)}`,
         undoable: true,
       })),
-      ...Object.values(CARE).flatMap((job) =>
+      ...CARE_KINDS.map((k) => careJob(item.species, k)).flatMap((job) =>
         item[job.field].map((l, i) => ({
           key: `${job.field}-${l.date}-${i}`,
           date: l.date,
@@ -209,7 +209,7 @@ export function ItemDetailModal(props: Props) {
   }
 
   if (view.kind === 'care' && item.kind === 'animal') {
-    const job = CARE[view.care];
+    const job = careJob(item.species, view.care);
     const done = () => (view.fromCard ? onClose() : back());
     return (
       <Sheet
@@ -222,7 +222,7 @@ export function ItemDetailModal(props: Props) {
             <Button label="Cancel" variant="secondary" onPress={done} />
             <Button
               label={`${job.emoji}  ${job.verb}`}
-              color={colors.plant}
+              color={job.color}
               disabled={view.who.length === 0}
               onPress={() => {
                 onCare(item.id, view.care, view.who);
@@ -543,9 +543,9 @@ export function ItemDetailModal(props: Props) {
                   <Button
                     key={c.kind}
                     label={item.care.length === 1 ? `${c.job.emoji}  ${c.job.past} now` : `${c.job.emoji} ${c.job.verb}`}
-                    color={colors.plant}
+                    color={c.job.color}
                     onPress={() =>
-                      item.names.length > 1
+                      asksWho(item, c.kind)
                         ? setView({ kind: 'care', care: c.kind, who: whoToTick(item, c.kind), fromCard: false })
                         : onCare(item.id, c.kind)
                     }

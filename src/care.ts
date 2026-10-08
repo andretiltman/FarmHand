@@ -1,13 +1,14 @@
 import { relativeDay } from './dates';
 import { dueSummary, DueSummary } from './stats';
+import { colors } from './theme';
 import { AnimalItem, CareKind, CareLog } from './types';
 
 /** The jobs an animal can need, in the order they're shown. */
-export const CARE_KINDS: CareKind[] = ['feed', 'walk', 'groom', 'ride'];
+export const CARE_KINDS: CareKind[] = ['feed', 'walk', 'groom', 'ride', 'clean'];
 
 export interface CareJob {
   /** The animal's history field the job is logged in. */
-  field: 'feedings' | 'walks' | 'groomings' | 'rides';
+  field: 'feedings' | 'walks' | 'groomings' | 'rides' | 'cleanings';
   emoji: string;
   /** "Feed" – button and chip label. */
   verb: string;
@@ -15,13 +16,28 @@ export interface CareJob {
   past: string;
   /** Usual days between, for a new animal. */
   everyDays: number;
+  /** Button colour, and its light background. */
+  color: string;
+  soft: string;
+  /** Done for the whole group at once (their coop or stable), so it never asks which named animals it was for. */
+  forEveryone?: boolean;
 }
 
 export const CARE: Record<CareKind, CareJob> = {
-  feed: { field: 'feedings', emoji: '🌾', verb: 'Feed', past: 'Fed', everyDays: 1 },
-  walk: { field: 'walks', emoji: '🐾', verb: 'Walk', past: 'Walked', everyDays: 1 },
-  groom: { field: 'groomings', emoji: '🧼', verb: 'Groom', past: 'Groomed', everyDays: 7 },
-  ride: { field: 'rides', emoji: '🏇', verb: 'Ride', past: 'Ridden', everyDays: 2 },
+  feed: { field: 'feedings', emoji: '🌾', verb: 'Feed', past: 'Fed', everyDays: 1, color: colors.plant, soft: colors.plantSoft },
+  walk: { field: 'walks', emoji: '🐾', verb: 'Walk', past: 'Walked', everyDays: 1, color: colors.animal, soft: colors.animalSoft },
+  groom: { field: 'groomings', emoji: '🧼', verb: 'Groom', past: 'Groomed', everyDays: 7, color: colors.water, soft: colors.waterSoft },
+  ride: { field: 'rides', emoji: '🏇', verb: 'Ride', past: 'Ridden', everyDays: 2, color: colors.task, soft: colors.taskSoft },
+  clean: {
+    field: 'cleanings',
+    emoji: '🧹',
+    verb: 'Clean',
+    past: 'Cleaned',
+    everyDays: 7,
+    color: colors.muck,
+    soft: colors.muckSoft,
+    forEveryone: true,
+  },
 };
 
 /** What a type of animal usually needs, used when adding one. */
@@ -35,14 +51,24 @@ export interface SpeciesPreset {
   example: string;
   /** Sizes with their usual feeding interval, for animals that eat less often as they grow (snakes). */
   sizes?: { label: string; feedEvery: number }[];
+  /** What a job is called for this animal, e.g. "Muck out" rather than "Clean" for horses. */
+  wording?: Partial<Record<CareKind, Pick<CareJob, 'verb' | 'past'>>>;
 }
 
 export const SPECIES_PRESETS: SpeciesPreset[] = [
-  { name: 'Chicken', emoji: '🐔', care: ['feed'], careEvery: {}, tracksEggs: true, example: 'The Girls' },
-  { name: 'Duck', emoji: '🦆', care: ['feed'], careEvery: {}, tracksEggs: true, example: 'The Ducks' },
-  { name: 'Quail', emoji: '🐦', care: ['feed'], careEvery: {}, tracksEggs: true, example: 'The Quails' },
+  { name: 'Chicken', emoji: '🐔', care: ['feed', 'clean'], careEvery: {}, tracksEggs: true, example: 'The Girls' },
+  { name: 'Duck', emoji: '🦆', care: ['feed', 'clean'], careEvery: {}, tracksEggs: true, example: 'The Ducks' },
+  { name: 'Quail', emoji: '🐦', care: ['feed', 'clean'], careEvery: {}, tracksEggs: true, example: 'The Quails' },
   { name: 'Dog', emoji: '🐕', care: ['feed', 'walk', 'groom'], careEvery: { groom: 7 }, tracksEggs: false, example: 'Rex' },
-  { name: 'Horse', emoji: '🐴', care: ['feed', 'groom', 'ride'], careEvery: { groom: 1 }, tracksEggs: false, example: 'Storm' },
+  {
+    name: 'Horse',
+    emoji: '🐴',
+    care: ['feed', 'groom', 'ride', 'clean'],
+    careEvery: { groom: 1, clean: 1 },
+    tracksEggs: false,
+    example: 'Storm',
+    wording: { clean: { verb: 'Muck out', past: 'Mucked out' } },
+  },
   {
     name: 'Snake',
     emoji: '🐍',
@@ -69,6 +95,16 @@ export function speciesEmoji(species: string): string {
   return findSpecies(species)?.emoji ?? '🐾';
 }
 
+/** The job as it's called for this type of animal ("Muck out" for horses, "Clean" for the rest). */
+export function careJob(species: string, kind: CareKind): CareJob {
+  return { ...CARE[kind], ...findSpecies(species)?.wording?.[kind] };
+}
+
+/** Whether logging the job asks which of the named animals it was for. */
+export function asksWho(animal: Pick<AnimalItem, 'names'>, kind: CareKind): boolean {
+  return animal.names.length > 1 && !CARE[kind].forEveryone;
+}
+
 export function careEvery(animal: Pick<AnimalItem, 'careEvery'>, kind: CareKind): number {
   return animal.careEvery[kind] ?? CARE[kind].everyDays;
 }
@@ -90,12 +126,12 @@ export const includes = (log: CareLog, name: string) => !log.who || log.who.incl
 /** Where each of the animal's jobs stands, in display order. Named animals are tracked one by one. */
 export function careStatuses(animal: AnimalItem, now: Date = new Date()): CareStatus[] {
   return CARE_KINDS.filter((k) => animal.care.includes(k)).map((kind) => {
-    const job = CARE[kind];
+    const job = careJob(animal.species, kind);
     const every = careEvery(animal, kind);
     const logs = animal[job.field];
     let last: string | undefined;
     let dueFor: string[] = [];
-    if (animal.names.length > 1) {
+    if (asksWho(animal, kind)) {
       const lastFor = animal.names.map((name) => ({ name, last: logs.find((l) => includes(l, name))?.date }));
       last = lastFor.some((n) => !n.last) ? undefined : lastFor.map((n) => n.last!).sort()[0];
       dueFor = lastFor.filter((n) => dueSummary(n.last, every, now).status !== 'ok').map((n) => n.name);
@@ -127,5 +163,5 @@ export function joinNames(names: string[]): string {
 /** "Fed", "Fed all" or "Walked Annie and Harley". */
 export function careLogText(job: CareJob, log: CareLog, names: string[]): string {
   if (log.who) return `${job.past} ${joinNames(log.who)}`;
-  return names.length > 1 ? `${job.past} all` : job.past;
+  return names.length > 1 && !job.forEveryone ? `${job.past} all` : job.past;
 }

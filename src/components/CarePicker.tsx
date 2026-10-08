@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { CARE, CARE_KINDS, careEvery, findSpecies } from '../care';
+import { CARE_KINDS, careEvery, careJob, findSpecies } from '../care';
 import { colors } from '../theme';
 import { CareKind } from '../types';
 import { Stepper } from './Stepper';
@@ -15,7 +15,7 @@ interface Props {
   onChangeEvery: (kind: CareKind, days: number) => void;
 }
 
-/** Pick what an animal needs (feeding, walks, grooming, rides, egg collecting) and how often. */
+/** Pick what an animal needs (feeding, walks, grooming, rides, cleaning out, egg collecting) and how often. */
 export function CarePicker(props: Props) {
   const { care, tracksEggs, onChange } = props;
   const toggle = (kind: CareKind) =>
@@ -26,6 +26,7 @@ export function CarePicker(props: Props) {
 
   const sizes = props.species ? findSpecies(props.species)?.sizes : undefined;
   const feedEvery = careEvery(props, 'feed');
+  const job = (k: CareKind) => careJob(props.species ?? '', k);
 
   return (
     <View>
@@ -51,7 +52,7 @@ export function CarePicker(props: Props) {
         {CARE_KINDS.map((k) => (
           <CareChip
             key={k}
-            label={`${CARE[k].emoji} ${CARE[k].verb}`}
+            label={`${job(k).emoji} ${job(k).verb}`}
             on={care.includes(k)}
             onPress={() => toggle(k)}
           />
@@ -63,10 +64,10 @@ export function CarePicker(props: Props) {
         return (
           <View key={k} style={styles.row}>
             <Text style={styles.rowLabel}>
-              {CARE[k].emoji} {CARE[k].verb} every
+              {job(k).emoji} {job(k).verb} every
             </Text>
             <Stepper
-              label={`${CARE[k].verb} interval`}
+              label={`${job(k).verb} interval`}
               value={days}
               onChange={(d) => props.onChangeEvery(k, d)}
               suffix={days === 1 ? 'day' : 'days'}

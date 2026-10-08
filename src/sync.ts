@@ -5,7 +5,7 @@ import { CareLog, EggLog, hasPhotos, PlantPhoto, TrackedItem } from './types';
  *
  * Each phone keeps its own full copy of every item. To sync, one phone's copy (a snapshot) is merged
  * into the other's, item by item (matched on id):
- *  - History (waterings, feedings, walks, groomings, rides, eggs, maintenance done) is combined, so if
+ *  - History (waterings, feedings, walks, groomings, rides, clean-outs, eggs, maintenance done) is combined, so if
  *    you both water a plant both waterings are kept. Entries listed in `removed` (undone on either phone)
  *    are left out.
  *  - Other fields (name, watering schedule, tags, growth stages, …) take whichever phone changed them
@@ -34,7 +34,7 @@ export interface SyncSnapshot {
 /** Fields merged by combining entries rather than by "newest wins", with the prefix used in `removed`. */
 const LOGS = { waterings: 'water', done: 'done' } as const;
 /** Animal care history, merged like eggs: entries are matched on their date. */
-const CARE_LOGS = { feedings: 'feed', walks: 'walk', groomings: 'groom', rides: 'ride' } as const;
+const CARE_LOGS = { feedings: 'feed', walks: 'walk', groomings: 'groom', rides: 'ride', cleanings: 'clean' } as const;
 const NOT_FIELDS = new Set([
   'id',
   'kind',

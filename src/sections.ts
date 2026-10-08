@@ -35,7 +35,7 @@ export const sections: Section[] = [
     label: 'Overview',
     emoji: '⭐',
     emptyTitle: 'All caught up',
-    emptyText: 'Nothing needs watering, transplanting, harvesting, feeding, walking, grooming or maintenance right now.',
+    emptyText: 'Nothing needs watering, transplanting, harvesting, feeding, walking, grooming, cleaning out or maintenance right now.',
     includes: needsAttention,
   },
   {
