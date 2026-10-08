@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CARE, careLogText, careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
-import { formatDateTime } from '../dates';
+import { formatDateTime, relativeDay } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
 import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
-import { Growth, TrackedItem } from '../types';
+import { AnimalItem, CareKind, Growth, TrackedItem } from '../types';
 import { Button } from './Button';
+import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { MilestoneEditor } from './MilestoneEditor';
+import { NamesEditor, WhoPicker } from './NamePicker';
 import { PhotoLog } from './PhotoLog';
 import { PhotoViewer } from './PhotoViewer';
 import { Sheet } from './Sheet';
@@ -22,7 +25,13 @@ interface Props {
   onClose: () => void;
   onWater: (id: string) => void;
   onLogEggs: (id: string, count: number) => void;
-  onFeed: (id: string) => void;
+  /** `who`: which of the named animals it was for (all when absent). */
+  onCare: (id: string, kind: CareKind, who?: string[]) => void;
+  /** Opens straight onto "who did you feed?" (from a card's quick button). */
+  startCare?: CareKind | null;
+  onSetNames: (id: string, names: string[]) => void;
+  onSetCare: (id: string, care: CareKind[], tracksEggs: boolean) => void;
+  onSetCareEvery: (id: string, kind: CareKind, days: number) => void;
   onCompleteTask: (id: string) => void;
   onSetTaskEvery: (id: string, days: number) => void;
   onAdvance: (id: string, action: StageAction) => void;
@@ -42,10 +51,11 @@ type View_ =
   | { kind: 'main' }
   | { kind: 'milestone'; key: MilestoneKey }
   | { kind: 'photo'; id: string }
-  | { kind: 'rename' };
+  | { kind: 'rename' }
+  | { kind: 'care'; care: CareKind; who: string[]; fromCard: boolean };
 
 export function ItemDetailModal(props: Props) {
-  const { item, onClose, onWater, onLogEggs, onFeed, onAdvance, onUndo, onDelete } = props;
+  const { item, onClose, onWater, onLogEggs, onCare, onAdvance, onUndo, onDelete, startCare } = props;
   const [eggCount, setEggCount] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -58,9 +68,13 @@ export function ItemDetailModal(props: Props) {
     setEggCount(1);
     setConfirmDelete(false);
     setShowGuide(false);
-    setView({ kind: 'main' });
+    setView(
+      startCare && item?.kind === 'animal'
+        ? { kind: 'care', care: startCare, who: whoToTick(item, startCare), fromCard: true }
+        : { kind: 'main' },
+    );
     setTransplantCount(null);
-  }, [item?.id]);
+  }, [item?.id, startCare]);
 
   if (!item) return null;
   const isPlant = item.kind === 'plant';
@@ -68,7 +82,7 @@ export function ItemDetailModal(props: Props) {
   let stats: { label: string; value: string }[];
   let history: { key: string; date: string; text: string; undoable: boolean }[];
   let subtitle = isPlant ? 'Plant' : item.kind === 'task' ? 'Maintenance' : '';
-  let icon = isPlant ? '🪴' : item.kind === 'task' ? '🛠️' : '🐔';
+  let icon = isPlant ? '🪴' : item.kind === 'task' ? '🛠️' : speciesEmoji(item.species);
   const growth = item.kind === 'plant' ? item.growth : undefined;
   const status = growth && growthStatus(growth);
   const crop = growth && findCrop(growth.cropId);
@@ -122,13 +136,18 @@ export function ItemDetailModal(props: Props) {
   } else {
     subtitle = `${item.headCount} × ${item.species}`;
     const s = animalSummary(item);
-    stats = [
-      { label: 'Last fed', value: s.lastFedLabel.replace(/^Fed /, '') },
-      { label: 'Eggs today', value: String(s.today) },
-      { label: 'Eggs / week', value: String(s.last7Days) },
-      { label: 'Eggs total', value: String(s.total) },
-    ];
-    // Feedings and egg logs share one timeline, newest first.
+    stats = careStatuses(item).map((c) => ({
+      label: `Last ${c.job.past.toLowerCase()}`,
+      value: c.last ? capitalize(relativeDay(c.last)) : 'Never',
+    }));
+    if (item.tracksEggs) {
+      stats.push(
+        { label: 'Eggs today', value: String(s.today) },
+        { label: 'Eggs / week', value: String(s.last7Days) },
+        { label: 'Eggs total', value: String(s.total) },
+      );
+    }
+    // Care and egg logs share one timeline, newest first. Jobs no longer tracked still show their history.
     history = [
       ...item.eggs.map((e, i) => ({
         key: `egg-${e.date}-${i}`,
@@ -136,12 +155,14 @@ export function ItemDetailModal(props: Props) {
         text: `🥚  ${e.count} egg${e.count === 1 ? '' : 's'} · ${formatDateTime(e.date)}`,
         undoable: true,
       })),
-      ...item.feedings.map((d, i) => ({
-        key: `feed-${d}-${i}`,
-        date: d,
-        text: `🌾  Fed · ${formatDateTime(d)}`,
-        undoable: true,
-      })),
+      ...Object.values(CARE).flatMap((job) =>
+        item[job.field].map((l, i) => ({
+          key: `${job.field}-${l.date}-${i}`,
+          date: l.date,
+          text: `${job.emoji}  ${careLogText(job, l, item.names)} · ${formatDateTime(l.date)}`,
+          undoable: true,
+        })),
+      ),
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }
 
@@ -183,6 +204,38 @@ export function ItemDetailModal(props: Props) {
           onSubmitEditing={save}
           maxLength={60}
         />
+      </Sheet>
+    );
+  }
+
+  if (view.kind === 'care' && item.kind === 'animal') {
+    const job = CARE[view.care];
+    const done = () => (view.fromCard ? onClose() : back());
+    return (
+      <Sheet
+        visible
+        onClose={onClose}
+        subtitle={subtitle}
+        title={`${icon}  ${item.name}`}
+        footer={
+          <>
+            <Button label="Cancel" variant="secondary" onPress={done} />
+            <Button
+              label={`${job.emoji}  ${job.verb}`}
+              color={colors.plant}
+              disabled={view.who.length === 0}
+              onPress={() => {
+                onCare(item.id, view.care, view.who);
+                done();
+              }}
+            />
+          </>
+        }
+      >
+        <ScrollView style={styles.body}>
+          <Text style={styles.sectionTitle}>Who did you {job.verb.toLowerCase()}?</Text>
+          <WhoPicker job={job} names={item.names} who={view.who} onChange={(who) => setView({ ...view, who })} />
+        </ScrollView>
       </Sheet>
     );
   }
@@ -411,6 +464,21 @@ export function ItemDetailModal(props: Props) {
           </View>
         )}
 
+        {item.kind === 'animal' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Names</Text>
+            <NamesEditor names={item.names} onChange={(names) => props.onSetNames(item.id, names)} />
+            <Text style={[styles.sectionTitle, styles.spacedTitle]}>Looking after</Text>
+            <CarePicker
+              care={item.care}
+              careEvery={item.careEvery}
+              tracksEggs={item.tracksEggs}
+              onChange={(care, tracksEggs) => props.onSetCare(item.id, care, tracksEggs)}
+              onChangeEvery={(kind, days) => props.onSetCareEvery(item.id, kind, days)}
+            />
+          </View>
+        )}
+
         {item.kind === 'task' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Repeat every</Text>
@@ -424,7 +492,7 @@ export function ItemDetailModal(props: Props) {
         )}
 
         <View style={styles.stats}>
-          {stats.map((s) => (
+          {stats.slice(0, 4).map((s) => (
             <View key={s.label} style={styles.stat}>
               <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
                 {s.value}
@@ -433,6 +501,18 @@ export function ItemDetailModal(props: Props) {
             </View>
           ))}
         </View>
+        {stats.length > 4 && (
+          <View style={[styles.stats, styles.statsMore]}>
+            {stats.slice(4).map((s) => (
+              <View key={s.label} style={styles.stat}>
+                <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+                  {s.value}
+                </Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {isPlant ? (
           <View style={styles.actionRow}>
@@ -444,22 +524,37 @@ export function ItemDetailModal(props: Props) {
           </View>
         ) : (
           <>
-            <View style={styles.actionRow}>
-              <Button label="🌾  Fed now" color={colors.plant} onPress={() => onFeed(item.id)} />
-            </View>
-            <View style={styles.eggRow}>
-              <Stepper label="Eggs collected" value={eggCount} onChange={setEggCount} max={200} suffix="eggs" />
-              <View style={styles.eggBtn}>
-                <Button
-                  label="Log"
-                  color={colors.animal}
-                  onPress={() => {
-                    onLogEggs(item.id, eggCount);
-                    setEggCount(1);
-                  }}
-                />
+            {item.care.length > 0 && (
+              <View style={[styles.actionRow, styles.careRow]}>
+                {careStatuses(item).map((c) => (
+                  <Button
+                    key={c.kind}
+                    label={item.care.length === 1 ? `${c.job.emoji}  ${c.job.past} now` : `${c.job.emoji} ${c.job.verb}`}
+                    color={colors.plant}
+                    onPress={() =>
+                      item.names.length > 1
+                        ? setView({ kind: 'care', care: c.kind, who: whoToTick(item, c.kind), fromCard: false })
+                        : onCare(item.id, c.kind)
+                    }
+                  />
+                ))}
               </View>
-            </View>
+            )}
+            {item.tracksEggs && (
+              <View style={styles.eggRow}>
+                <Stepper label="Eggs collected" value={eggCount} onChange={setEggCount} max={200} suffix="eggs" />
+                <View style={styles.eggBtn}>
+                  <Button
+                    label="Log"
+                    color={colors.animal}
+                    onPress={() => {
+                      onLogEggs(item.id, eggCount);
+                      setEggCount(1);
+                    }}
+                  />
+                </View>
+              </View>
+            )}
           </>
         )}
 
@@ -478,7 +573,7 @@ export function ItemDetailModal(props: Props) {
                 ? 'No waterings logged yet.'
                 : item.kind === 'task'
                   ? 'Not done yet.'
-                  : 'No feedings or eggs logged yet.'}
+                  : 'Nothing logged yet.'}
             </Text>
           ) : (
             history.map((h) => (
@@ -492,6 +587,14 @@ export function ItemDetailModal(props: Props) {
     </Sheet>
   );
 }
+
+/** Ticks the animals the job is due for, or everyone when it isn't due for anyone in particular. */
+function whoToTick(animal: AnimalItem, kind: CareKind): string[] {
+  const dueFor = careStatuses(animal).find((c) => c.kind === kind)?.dueFor ?? [];
+  return dueFor.length ? dueFor : animal.names;
+}
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /** "Now", "Today", "In 3d" or "2d late". */
 function dueValue(s: DueSummary): string {
@@ -523,6 +626,7 @@ const styles = StyleSheet.create({
   journeyHint: { fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: 4 },
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 8 },
+  spacedTitle: { marginTop: 20 },
   seedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   seedLabel: { fontSize: 14, color: colors.text },
   successLine: { fontSize: 14, fontWeight: '600', color: colors.plant, marginTop: 4 },
@@ -532,6 +636,7 @@ const styles = StyleSheet.create({
   guideToggle: { fontSize: 15, fontWeight: '600', color: colors.water, marginTop: 16, marginBottom: 8 },
   growthNote: { fontSize: 13, color: colors.muted, marginTop: 4, textAlign: 'center' },
   stats: { flexDirection: 'row', gap: 8 },
+  statsMore: { marginTop: 8 },
   stat: {
     flex: 1,
     backgroundColor: colors.background,
@@ -543,6 +648,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 16, fontWeight: '700', color: colors.text },
   statLabel: { fontSize: 12, color: colors.muted, marginTop: 2, textAlign: 'center' },
   actionRow: { flexDirection: 'row', marginTop: 16 },
+  careRow: { gap: 8 },
   eggRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 12 },
   eggBtn: { flex: 1, flexDirection: 'row' },
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, marginBottom: 8 },

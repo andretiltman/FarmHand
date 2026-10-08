@@ -1,12 +1,13 @@
-import { EggLog, PlantPhoto, TrackedItem } from './types';
+import { CareLog, EggLog, PlantPhoto, TrackedItem } from './types';
 
 /**
  * Keeping two phones in sync.
  *
  * Each phone keeps its own full copy of every item. To sync, one phone's copy (a snapshot) is merged
  * into the other's, item by item (matched on id):
- *  - History (waterings, feedings, eggs, maintenance done) is combined, so if you both water a plant
- *    both waterings are kept. Entries listed in `removed` (undone on either phone) are left out.
+ *  - History (waterings, feedings, walks, groomings, rides, eggs, maintenance done) is combined, so if
+ *    you both water a plant both waterings are kept. Entries listed in `removed` (undone on either phone)
+ *    are left out.
  *  - Other fields (name, watering schedule, tags, growth stages, …) take whichever phone changed them
  *    last, going by `changed`.
  *  - Deleted items are remembered by id, so a sync never brings them back.
@@ -31,11 +32,24 @@ export interface SyncSnapshot {
 }
 
 /** Fields merged by combining entries rather than by "newest wins", with the prefix used in `removed`. */
-const LOGS = { waterings: 'water', feedings: 'feed', done: 'done' } as const;
-const NOT_FIELDS = new Set(['id', 'kind', 'createdAt', 'changed', 'removed', 'eggs', 'photos', ...Object.keys(LOGS)]);
+const LOGS = { waterings: 'water', done: 'done' } as const;
+/** Animal care history, merged like eggs: entries are matched on their date. */
+const CARE_LOGS = { feedings: 'feed', walks: 'walk', groomings: 'groom', rides: 'ride' } as const;
+const NOT_FIELDS = new Set([
+  'id',
+  'kind',
+  'createdAt',
+  'changed',
+  'removed',
+  'eggs',
+  'photos',
+  ...Object.keys(LOGS),
+  ...Object.keys(CARE_LOGS),
+]);
 
 export const removedKey = {
-  log: (field: keyof typeof LOGS, date: string) => `${LOGS[field]}:${date}`,
+  log: (field: keyof typeof LOGS | keyof typeof CARE_LOGS, date: string) =>
+    `${{ ...LOGS, ...CARE_LOGS }[field]}:${date}`,
   egg: (date: string) => `egg:${date}`,
   photo: (id: string) => `photo:${id}`,
 };
@@ -85,6 +99,13 @@ export function mergeItem<T extends TrackedItem>(a: T, b: T, photos: boolean): T
     out[field] = [...new Set(all)].filter((d) => !gone.has(`${prefix}:${d}`)).sort(byNewest);
   }
   if (a.kind === 'animal' && b.kind === 'animal') {
+    for (const [field, prefix] of Object.entries(CARE_LOGS) as [keyof typeof CARE_LOGS, string][]) {
+      const logs = new Map<string, CareLog>();
+      for (const l of [...(a[field] ?? []), ...(b[field] ?? [])]) if (!logs.has(l.date)) logs.set(l.date, l);
+      out[field] = [...logs.values()]
+        .filter((l) => !gone.has(`${prefix}:${l.date}`))
+        .sort((x, y) => byNewest(x.date, y.date));
+    }
     const eggs = new Map<string, EggLog>();
     for (const e of [...a.eggs, ...b.eggs]) if (!eggs.has(e.date)) eggs.set(e.date, e);
     out.eggs = [...eggs.values()].filter((e) => !gone.has(removedKey.egg(e.date))).sort((x, y) => byNewest(x.date, y.date));

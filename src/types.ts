@@ -65,18 +65,40 @@ export interface EggLog {
   count: number;
 }
 
+/** A job an animal needs doing regularly (see care.ts). */
+export type CareKind = 'feed' | 'walk' | 'groom' | 'ride';
+
+/** One feeding, walk, grooming or ride. */
+export interface CareLog {
+  /** ISO timestamp. */
+  date: string;
+  /** The named animals it was done for; absent when it was done for all of them. */
+  who?: string[];
+}
+
 export interface AnimalItem extends Syncable {
   id: string;
   kind: 'animal';
   name: string;
-  /** e.g. "Chicken". */
+  /** e.g. "Chicken", "Dog", "Horse". */
   species: string;
-  /** Number of birds in this flock/entry. */
+  /** Number of animals in this flock/entry. */
   headCount: number;
+  /** Their names, e.g. ["Annie", "Harley"], so you can log a walk for just some of them. Optional. */
+  names: string[];
+  /** The jobs tracked for this animal, e.g. feed, walk and groom for a dog. */
+  care: CareKind[];
+  /** How often each job is due, in days; jobs left out use their usual timing. */
+  careEvery: Partial<Record<CareKind, number>>;
+  /** Whether egg collections are tracked (chickens, ducks, …). */
+  tracksEggs: boolean;
   /** Egg collections, newest first. */
   eggs: EggLog[];
-  /** ISO timestamps of each feeding, newest first. */
-  feedings: string[];
+  /** Each feeding, walk, grooming and ride, newest first. */
+  feedings: CareLog[];
+  walks: CareLog[];
+  groomings: CareLog[];
+  rides: CareLog[];
   createdAt: string;
 }
 
@@ -96,5 +118,5 @@ export type TrackedItem = PlantItem | AnimalItem | TaskItem;
 
 export type NewItem =
   | Omit<PlantItem, 'id' | 'waterings' | 'photos' | 'createdAt'>
-  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'createdAt'>
+  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'walks' | 'groomings' | 'rides' | 'createdAt'>
   | Omit<TaskItem, 'id' | 'createdAt'>;

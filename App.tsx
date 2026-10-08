@@ -11,6 +11,7 @@ import { ItemDetailModal } from './src/components/ItemDetailModal';
 import { TransferModal } from './src/components/TransferModal';
 import { SectionKey, sections } from './src/sections';
 import { colors, radius } from './src/theme';
+import { CareKind } from './src/types';
 import { useHomeAssistant } from './src/useHomeAssistant';
 import { useItems } from './src/useItems';
 
@@ -41,7 +42,10 @@ function HomeScreen() {
     setWaterEvery,
     waterPlant,
     logEggs,
-    feedAnimal,
+    logCare,
+    setCare,
+    setCareEvery,
+    setNames,
     completeTask,
     setTaskEvery,
     advanceStage,
@@ -56,6 +60,8 @@ function HomeScreen() {
   const [linking, setLinking] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Set when a card's care button opens the details popup to pick which named animals it was for. */
+  const [startCare, setStartCare] = useState<CareKind | null>(null);
   const [sectionKey, setSectionKey] = useState<SectionKey>('overview');
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
@@ -183,9 +189,17 @@ function HomeScreen() {
           renderItem={({ item }) => (
             <ItemCard
               item={item}
-              onPress={() => setSelectedId(item.id)}
+              onPress={() => {
+                setStartCare(null);
+                setSelectedId(item.id);
+              }}
               onWater={() => waterPlant(item.id)}
-              onFeed={() => feedAnimal(item.id)}
+              onCare={(kind) => {
+                if (item.kind === 'animal' && item.names.length > 1) {
+                  setStartCare(kind);
+                  setSelectedId(item.id);
+                } else logCare(item.id, kind);
+              }}
               onEgg={() => logEggs(item.id, 1)}
               onDone={() => completeTask(item.id)}
             />
@@ -245,10 +259,17 @@ function HomeScreen() {
       <AddItemModal visible={adding} onClose={() => setAdding(false)} onSave={addItem} />
       <ItemDetailModal
         item={selected}
-        onClose={() => setSelectedId(null)}
+        onClose={() => {
+          setSelectedId(null);
+          setStartCare(null);
+        }}
+        startCare={startCare}
+        onSetNames={setNames}
         onWater={waterPlant}
         onLogEggs={logEggs}
-        onFeed={feedAnimal}
+        onCare={logCare}
+        onSetCare={setCare}
+        onSetCareEvery={setCareEvery}
         onCompleteTask={completeTask}
         onSetTaskEvery={setTaskEvery}
         onAdvance={advanceStage}

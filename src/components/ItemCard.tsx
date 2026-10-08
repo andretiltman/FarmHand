@@ -1,11 +1,12 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
-import { formatDays } from '../dates';
+import { daysBetween, formatDays } from '../dates';
 import { growthStatus } from '../growth';
 import { animalSummary, DueStatus, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
-import { TrackedItem } from '../types';
+import { CareKind, TrackedItem } from '../types';
 import { TagList } from './TagPicker';
 
 interface QuickAction {
@@ -21,7 +22,7 @@ interface Props {
   item: TrackedItem;
   onPress: () => void;
   onWater: () => void;
-  onFeed: () => void;
+  onCare: (kind: CareKind) => void;
   onEgg: () => void;
   onDone: () => void;
 }
@@ -33,14 +34,17 @@ const statusColor: Record<DueStatus, string> = {
   overdue: colors.danger,
 };
 
-export function ItemCard({ item, onPress, onWater, onFeed, onEgg, onDone }: Props) {
+/** Room for this many quick-action buttons on a card. */
+const MAX_ACTIONS = 2;
+
+export function ItemCard({ item, onPress, onWater, onCare, onEgg, onDone }: Props) {
 
   let line1: string;
   let line2: string;
   /** Set when line 1 is a highlighted status rather than plain detail text. */
   let line1Color: string | null = null;
   let line2Color: string = colors.muted;
-  let icon = item.kind === 'plant' ? '🪴' : item.kind === 'animal' ? '🐔' : '🛠️';
+  let icon = item.kind === 'plant' ? '🪴' : item.kind === 'animal' ? speciesEmoji(item.species) : '🛠️';
   const iconBackground = { plant: colors.plantSoft, animal: colors.animalSoft, task: colors.taskSoft }[item.kind];
   let actions: QuickAction[];
   if (item.kind === 'plant') {
@@ -83,27 +87,44 @@ export function ItemCard({ item, onPress, onWater, onFeed, onEgg, onDone }: Prop
     ];
   } else {
     const s = animalSummary(item);
-    line1 = `🥚 ${s.today} today, ${s.last7Days}/week`;
-    line2 = `🌾 ${s.lastFedLabel}`;
-    line2Color = s.fedToday ? colors.plant : colors.warning;
-    actions = [
-      {
-        emoji: '🌾',
-        label: 'Feed',
-        accessibilityLabel: `Log feeding for ${item.name}`,
+    const care = careStatuses(item);
+    const due = care.filter((c) => c.status !== 'ok');
+    if (item.tracksEggs) line1 = `🥚 ${s.today} today, ${s.last7Days}/week`;
+    else if (care.length) {
+      line1 = care.map((c) => `${c.job.emoji} ${c.last ? shortAgo(c.last) : 'never'}`).join(' · ');
+    } else line1 = `${item.headCount} × ${item.species}`;
+    if (care.length === 1) {
+      line2 = `${care[0].job.emoji} ${care[0].lastLabel}`;
+      line2Color = care[0].status === 'ok' ? colors.plant : statusColor[care[0].status];
+    } else if (due.length) {
+      line2 = `Due: ${due.map((c) => `${c.job.emoji} ${c.job.verb}`).join(', ')}`;
+      line2Color = due.some((c) => c.status === 'overdue') ? colors.danger : colors.warning;
+    } else {
+      line2 = care.length ? '✓ All looked after' : '';
+      line2Color = colors.plant;
+    }
+    // Jobs that are due get the buttons first; the rest are in the details popup.
+    const jobs = [...due, ...care.filter((c) => c.status === 'ok')].slice(0, MAX_ACTIONS - (item.tracksEggs ? 1 : 0));
+    actions = care
+      .filter((c) => jobs.includes(c))
+      .map((c) => ({
+        emoji: c.job.emoji,
+        label: c.job.verb,
+        accessibilityLabel: `Log ${c.job.verb.toLowerCase()} for ${item.name}`,
         color: colors.plant,
         soft: colors.plantSoft,
-        onPress: onFeed,
-      },
-      {
+        onPress: () => onCare(c.kind),
+      }));
+    if (item.tracksEggs) {
+      actions.push({
         emoji: '🥚',
         label: '+1',
         accessibilityLabel: `Log one egg for ${item.name}`,
         color: colors.animal,
         soft: colors.animalSoft,
         onPress: onEgg,
-      },
-    ];
+      });
+    }
   }
 
   return (
@@ -147,6 +168,12 @@ export function ItemCard({ item, onPress, onWater, onFeed, onEgg, onDone }: Prop
       ))}
     </Pressable>
   );
+}
+
+/** "today" or "3d" – fits several jobs on one line. */
+function shortAgo(iso: string): string {
+  const days = daysBetween(new Date(iso), new Date());
+  return days <= 0 ? 'today' : `${days}d`;
 }
 
 const styles = StyleSheet.create({

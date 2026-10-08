@@ -1,26 +1,28 @@
 # FarmHand
 
-A simple mobile app for tracking your plants (their journey from seed to harvest, and how often you water them), your chickens (when you last fed them and how many eggs they lay) and recurring maintenance jobs (like adding bio enzymes to the septic tank). Built with [Expo](https://expo.dev) / React Native, so it runs on iOS, Android and the web.
+A simple mobile app for tracking your plants (their journey from seed to harvest, and how often you water them), your animals (feeding chickens and counting their eggs, walking and grooming the dogs, grooming and riding the horses) and recurring maintenance jobs (like adding bio enzymes to the septic tank). Built with [Expo](https://expo.dev) / React Native, so it runs on iOS, Android and the web.
 
 ## Features
 
 - **One list of everything** – all plants and animals on the home screen, each showing its status at a glance:
   - Crops: their current stage and a countdown – *Seedling in 7 days*, *Transplant in 22 days*, *Harvest in 65 days* – turning orange when it's time to transplant or harvest.
   - Plants: when they were last watered and when they're next due (turns orange when due, red when overdue).
-  - Animals: when they were last fed (orange until they've been fed today) and eggs collected today / over the last 7 days.
+  - Animals: what's due – *Due: 🐾 Walk, 🧼 Groom* (orange when due, red when overdue) or *All looked after* – plus eggs collected today / over the last 7 days for laying birds.
 - **Sections** – chips at the top of the list filter what you see, each with a count:
-  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, animals not fed today, and maintenance tasks that are due. Shows *All caught up* when there's nothing to do.
+  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, animals due a feed, walk, groom or ride, and maintenance tasks that are due. Shows *All caught up* when there's nothing to do.
   - 🌰 **Sown** – seeds that haven't sprouted yet.
   - 🌱 **Seedlings** – sprouted, waiting to be transplanted.
   - 🪴 **Plants** – growing, ready, harvested and watering-only plants.
-  - 🐔 **Animals**.
+  - 🐾 **Animals**.
   - 🛠️ **Maintenance** – recurring jobs.
 - **Maintenance tasks** – recurring jobs like *Septic tank bio enzymes* (monthly), *Clean gutters* or *Service lawnmower*. Pick a suggestion or type your own, choose how often it repeats (weekly to yearly, or any number of days), and say when it was last done so it doesn't start out overdue. Each shows when it's next due (orange when due, red when overdue).
-- **Quick actions** – tap 💧 **Water** on a plant, 🌾 **Feed** / 🥚 **+1** on an animal, or ✓ **Done** on a maintenance task, right from the list.
+- **Animal care** – each animal tracks the jobs it needs: 🌾 **Feed**, 🐾 **Walk**, 🧼 **Groom** and 🏇 **Ride**, plus 🥚 **Eggs** for laying birds. Picking a type fills in the usual ones – chickens, ducks and quail: feed daily and collect eggs; dogs: feed and walk daily, groom weekly; horses: feed and groom daily, ride every 2 days – and you can turn jobs on or off and change how often each is due, when adding the animal or later in its details.
+- **Named animals** – give a group of animals names (e.g. *Annie* and *Harley*), when adding them or later in their details. Tapping Feed, Walk, … then asks which of them it was for, with ticks for the ones that are due (or everyone) already set, and the history reads *Fed all* or *Walked Annie and Harley*. Each named animal is tracked on its own, so the dogs stay due until both have been walked – the card then says e.g. *🐾 Walk Harley*.
+- **Quick actions** – tap 💧 **Water** on a plant, ✓ **Done** on a maintenance task, or a care job (🌾 **Feed**, 🐾 **Walk**, …) / 🥚 **+1** on an animal, right from the list. Animals show two buttons, with whatever's due first; every job has a button in the details popup.
 - **Guided "Add" popup** – the **Add** button at the bottom opens a step-by-step popup:
   1. Choose **Plant** or **Animal**
   2. For plants, pick a crop (corn, tomato, strawberry, …) – each tile shows whether it's in season – or *Other plant / houseplant* for watering only
-  3. Enter details – for crops, a **growing guide** (sowing season with a *good time to sow?* check, depth, spacing, germination temperature and time, time to harvest, special notes like cold stratification), then choose **sow directly in the ground** or **start in a seed tray and transplant**, with the recommended method pre-selected (e.g. direct sowing for corn, a seed tray for tomatoes); for animals, type + how many
+  3. Enter details – for animals, pick a type (🐔 Chicken, 🦆 Duck, 🐦 Quail, 🐕 Dog, 🐴 Horse, or type your own), how many or their names, and what they need and how often; for crops, a **growing guide** (sowing season with a *good time to sow?* check, depth, spacing, germination temperature and time, time to harvest, special notes like cold stratification), then choose **sow directly in the ground** or **start in a seed tray and transplant**, with the recommended method pre-selected (e.g. direct sowing for corn, a seed tray for tomatoes)
   4. Review the estimated timeline and save
 - **Seed → Seedling → (Transplant) → Harvest** – each crop follows its journey:
   - After sowing, it counts down to the seedling stage, which starts automatically (or tap *It has sprouted* if it's early).
@@ -35,7 +37,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
 - **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, change how often a plant needs watering or a task repeats, rename it (✏️ **Rename**), or delete it.
 - **Full screen on Android** – the system navigation bar is hidden while FarmHand is open; swipe up from the bottom edge to bring it back briefly.
 - **Send plants to another phone** – tap 📤 at the top, tick the plants to send (optionally with their photos) and tap **Send**. FarmHand makes a small file and opens your phone's share menu, so you can send it by WhatsApp, email, Bluetooth, Nearby Share or AirDrop. The other person saves the file, taps 📤 → **Receive** → **Choose file**, and the plants are added with their whole journey, watering history, tags and photos. Afterwards the sender can **Remove from my phone** to finish the move, or keep a copy if you're both looking after them.
-- **Sync two phones** – for a garden you look after together. Each phone keeps its own copy and they merge each other's changes: waterings, feedings, eggs and jobs done on either phone are all kept (so you'll both see the plants were watered), and for anything else – a rename, a new watering schedule, a growth stage – the most recent change wins. Deleting something or undoing an entry on one phone removes it on the other too. Two ways to sync:
+- **Sync two phones** – for a garden you look after together. Each phone keeps its own copy and they merge each other's changes: waterings, feedings, walks, groomings, rides, eggs and jobs done on either phone are all kept (so you'll both see the plants were watered), and for anything else – a rename, a new watering schedule, a growth stage – the most recent change wins. Deleting something or undoing an entry on one phone removes it on the other too. Two ways to sync:
   - **Automatically through Home Assistant** – connect both phones to the same Home Assistant (🏠) and turn on **Sync with other phones** on both. Changes come through within a minute while FarmHand is open. Photos stay on the phone that took them.
   - **With a sync file** – 📤 → **Sync** → **Send sync file**, and the other phone opens it with 📤 → **Receive**. Do it both ways for a full sync. Handy when one of you is away from home. Choose which photos to include: **None**, the **Last 7 days** (photos added to FarmHand in the past week – keeps the file small for regular syncs) or **All** (for the first sync). Photos left out aren't removed from the other phone.
 - **Home Assistant sensors** – tap 🏠 at the top, enter your Home Assistant address and a long-lived access token, and every plant, animal and maintenance task appears in Home Assistant as a sensor (see below).
@@ -52,7 +54,8 @@ FarmHand then creates these sensors:
 | --- | --- | --- |
 | `sensor.farmhand_<crop name>` | growth stage: `seed`, `seedling`, `growing`, `ready`, `harvested` | `headline` (*Harvest in 12 days*), `needs_action`, `next_milestone`, `next_milestone_date`, `water_status`, `days_until_water_due`, `last_watered`, `tags` |
 | `sensor.farmhand_<plant name>` (watering only) | `never`, `ok`, `due`, `overdue` | `days_until_water_due`, `last_watered`, `water_every_days`, `tags` |
-| `sensor.farmhand_<animal name>` | eggs collected today | `eggs_last_7_days`, `eggs_total`, `fed_today`, `last_fed`, `head_count` |
+| `sensor.farmhand_<animal name>` (laying birds) | eggs collected today | `eggs_last_7_days`, `eggs_total`, `needs_care`, `fed_today`, `last_fed`, `head_count`, `names`, and for each job `<job>_status`, `last_<fed/walked/groomed/ridden>`, `<job>_every_days` |
+| `sensor.farmhand_<animal name>` (other animals) | most pressing job: `never`, `ok`, `due`, `overdue` | `needs_care` (e.g. `walk, groom`), plus the same per-job attributes |
 | `sensor.farmhand_<task name>` | `never`, `ok`, `due`, `overdue` | `due` (*Due in 23 days*), `days_until_due`, `every_days`, `last_done` |
 | `sensor.farmhand_plants_to_water` | number of plants due, overdue or never watered | |
 | `sensor.farmhand_eggs_today` | eggs collected today across all animals | |
@@ -89,6 +92,7 @@ src/crops.ts                    Crop catalog: sowing method, timings, growing gu
 src/seasons.ts                  Hemisphere-aware seasons and sowing advice
 src/growth.ts                   Seed → seedling → transplant → harvest stage logic
 src/stats.ts, src/dates.ts      Watering/task-due and egg-count calculations
+src/care.ts                     Animal care jobs (feed / walk / groom / ride) and animal types
 src/sections.ts                 Home screen sections (Overview / Sown / Seedlings / Plants / Animals / Maintenance)
 src/components/AddItemModal.tsx Guided add popup (plant, animal or maintenance task)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
@@ -99,6 +103,8 @@ src/sync.ts                     Merging two phones' copies of the items
 src/ids.ts, src/device.ts       Item GUIDs and this phone's id
 src/transferFile(.web).ts       Share sheet and file picker for transfer files
 src/components/ItemCard.tsx     A row in the list
+src/components/CarePicker.tsx   Choose an animal's care jobs and how often
+src/components/NamePicker.tsx   Animal names, and ticking which ones a feed/walk/… was for
 src/components/Journey.tsx      Growth timeline
 src/components/CropGuide.tsx    Growing guide card
 src/components/Calendar.tsx     Date picker
