@@ -173,8 +173,9 @@ export function useItems() {
   const removeItem = useCallback((id: string) => removeItems([id]), [removeItems]);
 
   /** Adds plants received from another phone as copies, with new ids so they never clash with plants already here. */
-  const importPlants = useCallback(async (plants: TransferPlant[]) => {
-    const added: PlantItem[] = [];
+  /** Adds plants and animals someone sent, as new entries (with plant photos saved to this phone). */
+  const importItems = useCallback(async (plants: TransferPlant[], animals: AnimalItem[]) => {
+    const added: TrackedItem[] = [];
     for (const plant of plants) {
       const photos: PlantPhoto[] = [];
       for (const photo of plant.photos) {
@@ -188,7 +189,11 @@ export function useItems() {
       }
       // A copy is a new plant, so it starts without the sender's sync history.
       const { changed: _changed, removed: _removed, ...rest } = plant;
-      added.push(migrate({ ...rest, id: newId(), photos }) as PlantItem);
+      added.push(migrate({ ...rest, id: newId(), photos }));
+    }
+    for (const animal of animals) {
+      const { changed: _changed, removed: _removed, ...rest } = animal;
+      added.push(migrate({ ...rest, id: newId() }));
     }
     setItems((prev) => [...added, ...prev]);
   }, []);
@@ -387,7 +392,7 @@ export function useItems() {
     addItem,
     removeItem,
     removeItems,
-    importPlants,
+    importItems,
     applySnapshot,
     renameItem,
     setTags,

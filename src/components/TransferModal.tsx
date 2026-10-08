@@ -1,6 +1,7 @@
 import { MutableRefObject, ReactNode, useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
+import { joinNames, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
 import { plural } from '../dates';
 import { growthStatus } from '../growth';
@@ -8,25 +9,23 @@ import { colors, radius } from '../theme';
 import { getDeviceId } from '../device';
 import { Deleted, MergeResult, SyncSnapshot } from '../sync';
 import {
-  packPlants,
-  packSeeds,
+  packItems,
   packSync,
   PhotoChoice,
   plantCount,
   photosToSend,
   Received,
   RECENT_PHOTO_DAYS,
-  SeedsFile,
-  seedsFileName,
   splitGrowth,
   syncFileName,
   TransferFile,
   transferFileName,
+  TransferPick,
   TransferPlant,
   unpackReceived,
 } from '../transfer';
 import { pickTransferFile, shareTransferFile } from '../transferFile';
-import { Growth, PlantItem, SeedPacket, TrackedItem } from '../types';
+import { AnimalItem, Growth, PlantItem, SeedPacket, TrackedItem } from '../types';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
@@ -35,7 +34,7 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   items: TrackedItem[];
-  onImport: (plants: TransferPlant[]) => Promise<void>;
+  onImport: (plants: TransferPlant[], animals: AnimalItem[]) => Promise<void>;
   onRemove: (ids: string[]) => void;
   onUpdateGrowth: (id: string, growth: Growth) => void;
   deletedRef: MutableRefObject<Deleted>;
@@ -44,26 +43,35 @@ interface Props {
   seeds: SeedPacket[];
   onImportSeeds: (seeds: SeedPacket[]) => Promise<void>;
   onTakeSeeds: (packetId: string, count: number) => void;
-  /** Opens straight onto sending seeds, with this packet ticked (from the seed inventory). */
+  /** Opens straight onto sending, with this seed packet ticked (from the seed inventory). */
   sendPacketId?: string | null;
 }
 
 type Step =
   | { kind: 'menu' }
   | { kind: 'send' }
-  /** `kept` holds what stays here for plants only partly given away. */
-  | { kind: 'sent'; ids: string[]; kept: Record<string, Growth> }
+  /**
+   * `ids` are the plants and animals sent, `kept` what stays here for plants only partly given away,
+   * and `given` how many seeds were given from each packet.
+   */
+  | { kind: 'sent'; ids: string[]; kept: Record<string, Growth>; given: Record<string, number> }
   | { kind: 'sync' }
   | { kind: 'receive'; received: Received | null }
-  | { kind: 'received'; count: number }
-  | { kind: 'synced'; result: MergeResult }
-  | { kind: 'sendSeeds' }
-  /** How many seeds were given from each packet. */
-  | { kind: 'sentSeeds'; given: Record<string, number> }
-  | { kind: 'receivedSeeds'; count: number };
+  | { kind: 'received'; plants: number; animals: number; seeds: number }
+  | { kind: 'synced'; result: MergeResult };
+
+/** e.g. "2 plants, 1 animal and 30 seeds". */
+function describe(plants: number, animals: number, seeds: number): string {
+  const parts = [
+    plants ? plural(plants, 'plant') : '',
+    animals ? plural(animals, 'animal') : '',
+    seeds ? plural(seeds, 'seed') : '',
+  ].filter(Boolean);
+  return parts.length < 2 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
 
 /**
- * Send plants or seeds to another phone as a file (via WhatsApp, email, Bluetooth, …), add plants or seeds
+ * Send plants, animals and seeds to another phone as a file (via WhatsApp, email, Bluetooth, …), add what
  * someone sent you, or sync everything with another phone by swapping sync files.
  */
 export function TransferModal({
@@ -81,25 +89,23 @@ export function TransferModal({
   sendPacketId,
 }: Props) {
   const plants = items.filter((i): i is PlantItem => i.kind === 'plant');
+  const animals = items.filter((i): i is AnimalItem => i.kind === 'animal');
+  const packets = seeds.filter((p) => p.count > 0);
   const [step, setStep] = useState<Step>({ kind: 'menu' });
+  /** Ticked plants, animals and seed packets. */
   const [selected, setSelected] = useState<string[]>([]);
-  /** How many to give away, for entries holding several plants (all of them when not set). */
+  /** How many plants or seeds to give, for entries holding several (all of them when not set). */
   const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [includePhotos, setIncludePhotos] = useState(true);
   const [syncPhotos, setSyncPhotos] = useState<PhotoChoice>('recent');
-  const [seedSelected, setSeedSelected] = useState<string[]>([]);
-  /** How many seeds to give from each packet (all of them when not set). */
-  const [seedAmounts, setSeedAmounts] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
-      setStep(sendPacketId ? { kind: 'sendSeeds' } : { kind: 'menu' });
-      setSelected([]);
+      setStep(sendPacketId ? { kind: 'send' } : { kind: 'menu' });
+      setSelected(sendPacketId ? [sendPacketId] : []);
       setAmounts({});
-      setSeedSelected(sendPacketId ? [sendPacketId] : []);
-      setSeedAmounts({});
       setIncludePhotos(true);
       setSyncPhotos('recent');
       setError(null);
@@ -123,29 +129,43 @@ export function TransferModal({
     }
   };
 
-  const chosen = plants.filter((p) => selected.includes(p.id));
-  const photoCount = chosen.reduce((n, p) => n + p.photos.length, 0);
+  const chosenPlants = plants.filter((p) => selected.includes(p.id));
+  const chosenAnimals = animals.filter((a) => selected.includes(a.id));
+  const chosenSeeds = packets.filter((p) => selected.includes(p.id));
+  const chosenCount = chosenPlants.length + chosenAnimals.length + chosenSeeds.length;
+  const photoCount =
+    chosenPlants.reduce((n, p) => n + p.photos.length, 0) + chosenSeeds.reduce((n, p) => n + p.photos.length, 0);
   const syncPhotoCount = (choice: PhotoChoice) =>
     plants.reduce((n, p) => n + photosToSend(p.photos, choice).length, 0);
+  const allIds = [...plants, ...animals, ...packets].map((i) => i.id);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selected.includes(id));
+  const toggle = (id: string) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   const amountOf = (p: PlantItem) => {
     const total = plantCount(p);
     return total === undefined ? undefined : Math.min(amounts[p.id] ?? total, total);
   };
+  const seedAmountOf = (p: SeedPacket) => Math.min(amounts[p.id] ?? p.count, p.count);
 
   const send = () =>
     run(async () => {
       const kept: Record<string, Growth> = {};
-      const toSend = chosen.map((p) => {
+      const sentPlants = chosenPlants.map((p) => {
         const give = amountOf(p);
         if (!p.growth || give === undefined || give >= plantCount(p)!) return p;
         const split = splitGrowth(p.growth, give);
         kept[p.id] = split.kept;
         return { ...p, growth: split.sent };
       });
-      const text = await packPlants(toSend, includePhotos);
-      await shareTransferFile(transferFileName(toSend), text);
-      go({ kind: 'sent', ids: chosen.map((p) => p.id), kept });
+      const given = Object.fromEntries(chosenSeeds.map((p) => [p.id, seedAmountOf(p)]));
+      const pick: TransferPick = {
+        plants: sentPlants,
+        animals: chosenAnimals,
+        seeds: chosenSeeds.map((p) => ({ ...p, count: given[p.id] })),
+      };
+      await shareTransferFile(transferFileName(pick), await packItems(pick, includePhotos));
+      go({ kind: 'sent', ids: [...chosenPlants, ...chosenAnimals].map((i) => i.id), kept, given });
     });
 
   const sendSync = () =>
@@ -166,38 +186,17 @@ export function TransferModal({
       go({ kind: 'synced', result: await onSync(snapshot) });
     });
 
-  const packets = seeds.filter((p) => p.count > 0);
-  const chosenSeeds = packets.filter((p) => seedSelected.includes(p.id));
-  const seedAmountOf = (p: SeedPacket) => Math.min(seedAmounts[p.id] ?? p.count, p.count);
-  const seedCount = chosenSeeds.reduce((n, p) => n + seedAmountOf(p), 0);
-  const seedPhotoCount = chosenSeeds.reduce((n, p) => n + p.photos.length, 0);
-  const allSeedsSelected = packets.length > 0 && seedSelected.length === packets.length;
-  const toggleSeeds = (id: string) =>
-    setSeedSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-
-  const sendSeeds = () =>
-    run(async () => {
-      const given = Object.fromEntries(chosenSeeds.map((p) => [p.id, seedAmountOf(p)]));
-      const toSend = chosenSeeds.map((p) => ({ ...p, count: given[p.id] }));
-      await shareTransferFile(seedsFileName(toSend), await packSeeds(toSend, includePhotos));
-      go({ kind: 'sentSeeds', given });
-    });
-
-  const receiveSeeds = (file: SeedsFile) =>
-    run(async () => {
-      await onImportSeeds(file.seeds);
-      go({ kind: 'receivedSeeds', count: file.seeds.reduce((n, p) => n + p.count, 0) });
-    });
-
   const receive = (file: TransferFile) =>
     run(async () => {
-      await onImport(file.plants);
-      go({ kind: 'received', count: file.plants.length });
+      if (file.plants.length || file.animals.length) await onImport(file.plants, file.animals);
+      if (file.seeds.length) await onImportSeeds(file.seeds);
+      go({
+        kind: 'received',
+        plants: file.plants.length,
+        animals: file.animals.length,
+        seeds: file.seeds.reduce((n, p) => n + p.count, 0),
+      });
     });
-
-  const toggle = (id: string) =>
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  const allSelected = plants.length > 0 && selected.length === plants.length;
 
   const photoSwitch = (count: number) =>
     count > 0 ? (
@@ -223,30 +222,23 @@ export function TransferModal({
       body = (
         <>
           <Text style={styles.help}>
-            Move plants to someone else's phone – with their whole journey, watering history, tags and photos – share
-            seeds from your inventory, or sync with a phone you share the garden with.
+            Move plants and animals to someone else's phone – with their whole history, tags and photos – share seeds
+            from your inventory, or sync with a phone you share the garden with.
           </Text>
           <View style={styles.choiceRow}>
-            <Choice emoji="📤" title="Send" desc="Share plants as a file" onPress={() => go({ kind: 'send' })} />
+            <Choice
+              emoji="📤"
+              title="Send"
+              desc="Share plants, animals or seeds as a file"
+              onPress={() => go({ kind: 'send' })}
+            />
             <Choice
               emoji="📥"
               title="Receive"
-              desc="Add plants or seeds someone sent you"
+              desc="Add plants, animals or seeds someone sent you"
               onPress={() => go({ kind: 'receive', received: null })}
             />
           </View>
-          <Pressable
-            onPress={() => go({ kind: 'sendSeeds' })}
-            style={({ pressed }) => [styles.syncChoice, styles.seedsChoice, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Send seeds"
-          >
-            <Text style={styles.syncEmoji}>🌰</Text>
-            <View style={styles.flex}>
-              <Text style={[styles.choiceTitle, styles.noMargin]}>Send seeds</Text>
-              <Text style={styles.syncDesc}>Give someone seeds from your inventory, with photos of the packet</Text>
-            </View>
-          </Pressable>
           <Pressable
             onPress={() => go({ kind: 'sync' })}
             style={({ pressed }) => [styles.syncChoice, pressed && styles.pressed]}
@@ -263,42 +255,56 @@ export function TransferModal({
       );
       break;
 
-    case 'send':
-      title = 'Send plants';
+    case 'send': {
+      title = 'Send';
+      const amountPicker = (id: string, name: string, value: number, total: number, suffix: string) => (
+        <View style={styles.amount}>
+          <Text style={styles.amountLabel}>How many to give?</Text>
+          <Stepper
+            label={`${name} to give`}
+            value={value}
+            onChange={(n) => setAmounts((prev) => ({ ...prev, [id]: n }))}
+            min={1}
+            max={total}
+            suffix={`of ${total}${suffix}`}
+          />
+          <Text style={styles.hint}>{value === total ? 'All of them' : `${total - value} stay with you`}</Text>
+        </View>
+      );
       body =
-        plants.length === 0 ? (
-          <Text style={styles.help}>You don't have any plants to send yet.</Text>
+        allIds.length === 0 ? (
+          <Text style={styles.help}>You don't have anything to send yet.</Text>
         ) : (
           <ScrollView style={styles.list}>
             <Pressable
-              onPress={() => setSelected(allSelected ? [] : plants.map((p) => p.id))}
+              onPress={() => setSelected(allSelected ? [] : allIds)}
               style={({ pressed }) => [styles.selectAll, pressed && styles.pressed]}
               accessibilityRole="button"
             >
               <Text style={styles.selectAllText}>{allSelected ? 'Select none' : 'Select all'}</Text>
             </Pressable>
+            {plants.length > 0 ? <Text style={styles.group}>🪴 Plants</Text> : null}
             {plants.map((p) => {
               const checked = selected.includes(p.id);
               const total = plantCount(p);
               return (
                 <View key={p.id}>
                   <PlantRow plant={p} checked={checked} onPress={() => toggle(p.id)} />
-                  {checked && total !== undefined && total > 1 ? (
-                    <View style={styles.amount}>
-                      <Text style={styles.amountLabel}>How many to give?</Text>
-                      <Stepper
-                        label={`${p.name} to give`}
-                        value={amountOf(p)!}
-                        onChange={(n) => setAmounts((prev) => ({ ...prev, [p.id]: n }))}
-                        min={1}
-                        max={total}
-                        suffix={`of ${total}`}
-                      />
-                      <Text style={styles.hint}>
-                        {amountOf(p) === total ? 'All of them' : `${total - amountOf(p)!} stay with you`}
-                      </Text>
-                    </View>
-                  ) : null}
+                  {checked && total !== undefined && total > 1 ? amountPicker(p.id, p.name, amountOf(p)!, total, '') : null}
+                </View>
+              );
+            })}
+            {animals.length > 0 ? <Text style={styles.group}>🐾 Animals</Text> : null}
+            {animals.map((a) => (
+              <AnimalRow key={a.id} animal={a} checked={selected.includes(a.id)} onPress={() => toggle(a.id)} />
+            ))}
+            {packets.length > 0 ? <Text style={styles.group}>🌰 Seeds</Text> : null}
+            {packets.map((p) => {
+              const checked = selected.includes(p.id);
+              return (
+                <View key={p.id}>
+                  <SeedRow packet={p} checked={checked} onPress={() => toggle(p.id)} />
+                  {checked && p.count > 1 ? amountPicker(p.id, `${p.name} seeds`, seedAmountOf(p), p.count, ' seeds') : null}
                 </View>
               );
             })}
@@ -310,28 +316,35 @@ export function TransferModal({
         <>
           <Button label="Back" variant="secondary" onPress={() => go({ kind: 'menu' })} />
           <Button
-            label={busy ? 'Preparing…' : chosen.length > 1 ? `Send ${chosen.length} plants` : 'Send'}
+            label={busy ? 'Preparing…' : chosenCount > 1 ? `Send ${chosenCount} items` : 'Send'}
             onPress={send}
-            disabled={busy || chosen.length === 0}
+            disabled={busy || chosenCount === 0}
           />
         </>
       );
       break;
+    }
 
     case 'sent': {
-      const { ids, kept } = step;
+      const { ids, kept, given } = step;
       const whole = ids.filter((id) => !kept[id]);
       const split = ids.filter((id) => kept[id]);
-      const one = ids.length === 1;
+      const seedIds = Object.keys(given);
+      const one = ids.length + seedIds.length === 1;
+      const nameOf = (id: string) => items.find((i) => i.id === id)?.name;
       body = (
         <>
           <Text style={styles.help}>
-            Once the other person has added {one ? 'it' : 'them'} on their phone (📥 Receive),{' '}
-            {split.length === 0
-              ? `you can remove ${one ? 'the plant' : `the ${ids.length} plants`} from yours to finish moving ${one ? 'it' : 'them'}`
-              : 'you can take what you gave away off your phone'}{' '}
-            – or keep a copy if you're both looking after {one ? 'it' : 'them'}.
+            Once the other person has added {one ? 'it' : 'them'} on their phone (📥 Receive), update yours to finish
+            handing {one ? 'it' : 'them'} over – or keep a copy if you're both looking after {one ? 'it' : 'them'}.
           </Text>
+          {whole.map((id) =>
+            nameOf(id) ? (
+              <Text key={id} style={[styles.hint, styles.spaced]}>
+                {nameOf(id)}: will be removed from your phone.
+              </Text>
+            ) : null,
+          )}
           {split.map((id) => {
             const plant = plants.find((p) => p.id === id);
             return plant ? (
@@ -340,113 +353,28 @@ export function TransferModal({
               </Text>
             ) : null;
           })}
-          {whole.length > 0 && split.length > 0 ? (
-            <Text style={[styles.hint, styles.spaced]}>
-              {whole.length === 1 ? '1 plant was' : `${whole.length} plants were`} given away completely and will be
-              removed.
-            </Text>
-          ) : null}
-        </>
-      );
-      title = 'Sent?';
-      footer = (
-        <>
-          <Button label="Keep a copy" variant="secondary" onPress={onClose} />
-          <Button
-            label={split.length === 0 ? 'Remove from my phone' : 'Update my phone'}
-            variant={split.length === 0 ? 'danger' : 'primary'}
-            onPress={() => {
-              split.forEach((id) => onUpdateGrowth(id, kept[id]));
-              if (whole.length) onRemove(whole);
-              onClose();
-            }}
-          />
-        </>
-      );
-      break;
-    }
-
-    case 'sendSeeds':
-      title = 'Send seeds';
-      body =
-        packets.length === 0 ? (
-          <Text style={styles.help}>You don't have any seeds to send yet – add some with the 🌰 button first.</Text>
-        ) : (
-          <ScrollView style={styles.list}>
-            <Pressable
-              onPress={() => setSeedSelected(allSeedsSelected ? [] : packets.map((p) => p.id))}
-              style={({ pressed }) => [styles.selectAll, pressed && styles.pressed]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.selectAllText}>{allSeedsSelected ? 'Select none' : 'Select all'}</Text>
-            </Pressable>
-            {packets.map((p) => {
-              const checked = seedSelected.includes(p.id);
-              return (
-                <View key={p.id}>
-                  <SeedRow packet={p} checked={checked} onPress={() => toggleSeeds(p.id)} />
-                  {checked && p.count > 1 ? (
-                    <View style={styles.amount}>
-                      <Text style={styles.amountLabel}>How many to give?</Text>
-                      <Stepper
-                        label={`${p.name} seeds to give`}
-                        value={seedAmountOf(p)}
-                        onChange={(n) => setSeedAmounts((prev) => ({ ...prev, [p.id]: n }))}
-                        min={1}
-                        max={p.count}
-                        suffix={`of ${p.count}`}
-                      />
-                      <Text style={styles.hint}>
-                        {seedAmountOf(p) === p.count ? 'All of them' : `${p.count - seedAmountOf(p)} stay with you`}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })}
-            {photoSwitch(seedPhotoCount)}
-            {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
-          </ScrollView>
-        );
-      footer = (
-        <>
-          <Button label="Back" variant="secondary" onPress={() => go({ kind: 'menu' })} />
-          <Button
-            label={busy ? 'Preparing…' : seedCount > 0 ? `Send ${plural(seedCount, 'seed')}` : 'Send'}
-            onPress={sendSeeds}
-            disabled={busy || chosenSeeds.length === 0}
-          />
-        </>
-      );
-      break;
-
-    case 'sentSeeds': {
-      const given = Object.entries(step.given);
-      const total = given.reduce((n, [, c]) => n + c, 0);
-      title = 'Sent?';
-      body = (
-        <>
-          <Text style={styles.help}>
-            Once the other person has added the seeds on their phone (📥 Receive), take the {plural(total, 'seed')} you
-            gave out of your inventory – or keep them if you didn't hand them over after all.
-          </Text>
-          {given.map(([id, count]) => {
+          {seedIds.map((id) => {
             const packet = seeds.find((p) => p.id === id);
             return packet ? (
               <Text key={id} style={[styles.hint, styles.spaced]}>
-                {packet.name}: {Math.max(0, packet.count - count)} will stay with you.
+                {packet.name}: {plural(Math.max(0, packet.count - given[id]), 'seed')} will stay with you.
               </Text>
             ) : null;
           })}
         </>
       );
+      title = 'Sent?';
+      const onlyRemoves = split.length === 0 && seedIds.length === 0;
       footer = (
         <>
-          <Button label="Keep them" variant="secondary" onPress={onClose} />
+          <Button label="Keep a copy" variant="secondary" onPress={onClose} />
           <Button
-            label="Take them out"
+            label={onlyRemoves ? 'Remove from my phone' : 'Update my phone'}
+            variant={onlyRemoves ? 'danger' : 'primary'}
             onPress={() => {
-              given.forEach(([id, count]) => onTakeSeeds(id, count));
+              split.forEach((id) => onUpdateGrowth(id, kept[id]));
+              if (whole.length) onRemove(whole);
+              seedIds.forEach((id) => onTakeSeeds(id, given[id]));
               onClose();
             }}
           />
@@ -454,17 +382,6 @@ export function TransferModal({
       );
       break;
     }
-
-    case 'receivedSeeds':
-      title = 'Seeds added';
-      body = (
-        <Text style={styles.help}>
-          ✅ {plural(step.count, 'seed')} {step.count === 1 ? 'was' : 'were'} added to your seed inventory (🌰). Let the
-          sender know so they can take them out of theirs.
-        </Text>
-      );
-      footer = <Button label="Done" onPress={onClose} />;
-      break;
 
     case 'sync':
       title = 'Sync with another phone';
@@ -531,8 +448,8 @@ export function TransferModal({
         body = (
           <>
             <Text style={styles.help}>
-              Ask the other person to tap 📤 Send, 🌰 Send seeds or 🔄 Sync. When the file arrives (e.g. in WhatsApp or your email), save it to your
-              phone, then choose it here.
+              Ask the other person to tap 📤 Send or 🔄 Sync. When the file arrives (e.g. in WhatsApp or your email),
+              save it to your phone, then choose it here.
             </Text>
             {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
           </>
@@ -561,16 +478,24 @@ export function TransferModal({
             <Button label={busy ? 'Syncing…' : 'Sync'} onPress={() => merge(snapshot)} disabled={busy} />
           </>
         );
-      } else if (step.received.kind === 'seeds') {
+      } else {
         const file = step.received.file;
-        const total = file.seeds.reduce((n, p) => n + p.count, 0);
-        title = 'Receive seeds';
+        const seedTotal = file.seeds.reduce((n, p) => n + p.count, 0);
+        const count = file.plants.length + file.animals.length + file.seeds.length;
+        const onlySeeds = file.plants.length === 0 && file.animals.length === 0;
+        if (onlySeeds) title = 'Receive seeds';
         body = (
           <ScrollView style={styles.list}>
             <Text style={styles.help}>
-              {file.seeds.length === 1 ? 'These seeds' : `Seeds from ${file.seeds.length} packets`} will be added to your
-              seed inventory:
+              {count === 1 ? 'This' : 'These'} will be added to your{' '}
+              {onlySeeds ? 'seed inventory' : file.seeds.length ? 'list and seed inventory' : 'list'}:
             </Text>
+            {file.plants.map((p, i) => (
+              <PlantRow key={`${p.id}-${i}`} plant={p} />
+            ))}
+            {file.animals.map((a, i) => (
+              <AnimalRow key={`${a.id}-${i}`} animal={a} />
+            ))}
             {file.seeds.map((p, i) => (
               <SeedRow key={`${p.id}-${i}`} packet={p} />
             ))}
@@ -581,31 +506,17 @@ export function TransferModal({
           <>
             <Button label="Cancel" variant="secondary" onPress={() => go({ kind: 'receive', received: null })} />
             <Button
-              label={busy ? 'Adding…' : `Add ${plural(total, 'seed')}`}
-              onPress={() => receiveSeeds(file)}
-              disabled={busy}
-            />
-          </>
-        );
-      } else {
-        const file = step.received.file;
-        body = (
-          <ScrollView style={styles.list}>
-            <Text style={styles.help}>
-              {file.plants.length === 1 ? 'This plant' : `These ${file.plants.length} plants`} will be added to your
-              list:
-            </Text>
-            {file.plants.map((p, i) => (
-              <PlantRow key={`${p.id}-${i}`} plant={p} />
-            ))}
-            {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
-          </ScrollView>
-        );
-        footer = (
-          <>
-            <Button label="Cancel" variant="secondary" onPress={() => go({ kind: 'receive', received: null })} />
-            <Button
-              label={busy ? 'Adding…' : file.plants.length > 1 ? `Add ${file.plants.length} plants` : 'Add plant'}
+              label={
+                busy
+                  ? 'Adding…'
+                  : onlySeeds
+                    ? `Add ${plural(seedTotal, 'seed')}`
+                    : count === 1
+                      ? file.plants.length
+                        ? 'Add plant'
+                        : 'Add animals'
+                      : `Add ${count} items`
+              }
               onPress={() => receive(file)}
               disabled={busy}
             />
@@ -614,16 +525,20 @@ export function TransferModal({
       }
       break;
 
-    case 'received':
-      title = 'Plants added';
+    case 'received': {
+      const { plants: p, animals: a, seeds: n } = step;
+      const one = p + a + n === 1;
+      title = 'Added';
       body = (
         <Text style={styles.help}>
-          ✅ {step.count === 1 ? '1 plant was' : `${step.count} plants were`} added to your list. Let the sender know so
-          they can remove {step.count === 1 ? 'it' : 'them'} from their phone.
+          ✅ {describe(p, a, n)} {one ? 'was' : 'were'} added
+          {p || a ? ` to your list${n ? ' and seed inventory' : ''}` : ' to your seed inventory'}. Let the sender know so
+          they can take {one ? 'it' : 'them'} off their phone.
         </Text>
       );
       footer = <Button label="Done" onPress={onClose} />;
       break;
+    }
 
     case 'synced': {
       const { added, updated, removed } = step.result;
@@ -708,6 +623,41 @@ function SeedRow({ packet, checked, onPress }: { packet: SeedPacket; checked?: b
   );
 }
 
+function AnimalRow({ animal, checked, onPress }: { animal: AnimalItem; checked?: boolean; onPress?: () => void }) {
+  let detail = animal.headCount === 1 ? animal.species : `${animal.species} · ${plural(animal.headCount, 'animal')}`;
+  if (animal.names.length > 0 && animal.names.join(' ') !== animal.name) detail += ` · ${joinNames(animal.names)}`;
+  const content = (
+    <>
+      <Text style={styles.rowEmoji}>{speciesEmoji(animal.species)}</Text>
+      <View style={styles.flex}>
+        <Text style={styles.rowName} numberOfLines={1}>
+          {animal.name}
+        </Text>
+        <Text style={styles.rowDetail} numberOfLines={1}>
+          {detail}
+        </Text>
+      </View>
+      {onPress ? (
+        <View style={[styles.check, checked && styles.checkOn]}>
+          {checked ? <Text style={styles.checkMark}>✓</Text> : null}
+        </View>
+      ) : null}
+    </>
+  );
+  if (!onPress) return <View style={styles.row}>{content}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, checked && styles.rowOn, pressed && styles.pressed]}
+      accessibilityRole="checkbox"
+      aria-checked={checked}
+      accessibilityLabel={animal.name}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
 function PlantRow({ plant, checked, onPress }: { plant: PlantItem; checked?: boolean; onPress?: () => void }) {
   const crop = plant.growth && findCrop(plant.growth.cropId);
   let detail = plant.growth ? growthStatus(plant.growth).headline : `Water every ${plant.waterEveryDays} days`;
@@ -777,7 +727,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   syncEmoji: { fontSize: 34 },
-  seedsChoice: { borderColor: colors.plant, backgroundColor: colors.plantSoft },
   syncDesc: { fontSize: 13, color: colors.muted, marginTop: 2 },
   spaced: { marginTop: 12 },
   photosLabel: { marginTop: 18, marginBottom: 8 },
@@ -803,6 +752,7 @@ const styles = StyleSheet.create({
   amountLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   selectAll: { alignSelf: 'flex-end', paddingVertical: 4, marginBottom: 8 },
   selectAllText: { fontSize: 15, fontWeight: '600', color: colors.primary },
+  group: { fontSize: 14, fontWeight: '700', color: colors.muted, marginTop: 14 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

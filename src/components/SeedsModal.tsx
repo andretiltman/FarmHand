@@ -23,7 +23,7 @@ interface Props {
   onAddPhoto: (id: string, pickedUri: string) => Promise<void>;
   onSetPhotoDate: (id: string, photoId: string, takenAt: string) => void;
   onRemovePhoto: (id: string, photoId: string) => void;
-  /** Opens "Send seeds" with this packet ticked. */
+  /** Opens "Send" with this packet ticked. */
   onSend: (id: string) => void;
 }
 
@@ -46,8 +46,9 @@ export function SeedsModal(props: Props) {
   const [name, setName] = useState('');
   const [count, setCount] = useState(10);
 
+  // Opened from the Add menu, so start on the add form; the packets on hand are a tap away.
   useEffect(() => {
-    if (visible) setView({ kind: packets.length === 0 ? 'add' : 'list' });
+    if (visible) startAdding();
   }, [visible]);
 
   const open = (next: View_) => {
@@ -181,7 +182,7 @@ export function SeedsModal(props: Props) {
         footer={
           <>
             <Button
-              label={packets.length ? 'Back' : 'Cancel'}
+              label={packets.length ? '🌰 My seeds' : 'Cancel'}
               variant="secondary"
               onPress={() => (packets.length ? open({ kind: 'list' }) : onClose())}
             />

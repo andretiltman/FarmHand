@@ -35,7 +35,7 @@ function HomeScreen() {
     addItem,
     removeItem,
     removeItems,
-    importPlants,
+    importItems,
     applySnapshot,
     itemsRef,
     deletedRef,
@@ -63,7 +63,7 @@ function HomeScreen() {
   const [linking, setLinking] = useState(false);
   const [stocking, setStocking] = useState(false);
   const [transferring, setTransferring] = useState(false);
-  /** Set when a seed packet's Send button opens the transfer popup on "Send seeds". */
+  /** Set when a seed packet's Send button opens the transfer popup on "Send" with it ticked. */
   const [sendPacketId, setSendPacketId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Set when a card's care button opens the details popup to pick which named animals it was for. */
@@ -120,20 +120,11 @@ function HomeScreen() {
           </Text>
         </View>
         <Pressable
-          onPress={() => setStocking(true)}
-          hitSlop={8}
-          style={({ pressed }) => [styles.haButton, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Seed inventory"
-        >
-          <Text style={styles.haIcon}>🌰</Text>
-        </Pressable>
-        <Pressable
           onPress={() => setTransferring(true)}
           hitSlop={8}
           style={({ pressed }) => [styles.haButton, pressed && { opacity: 0.7 }]}
           accessibilityRole="button"
-          accessibilityLabel="Send or receive plants and seeds"
+          accessibilityLabel="Send or receive plants, animals and seeds"
         >
           <Text style={styles.haIcon}>📤</Text>
         </Pressable>
@@ -243,7 +234,7 @@ function HomeScreen() {
           onPress={() => setAdding(true)}
           style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.8 }]}
           accessibilityRole="button"
-          accessibilityLabel="Add a plant, animal or maintenance task"
+          accessibilityLabel="Add a plant, animal, maintenance task or seeds"
         >
           <Text style={styles.addText}>＋ Add</Text>
         </Pressable>
@@ -268,7 +259,7 @@ function HomeScreen() {
           setSendPacketId(null);
         }}
         items={items}
-        onImport={importPlants}
+        onImport={importItems}
         onRemove={removeItems}
         onUpdateGrowth={updateGrowth}
         deletedRef={deletedRef}
@@ -300,6 +291,10 @@ function HomeScreen() {
         onSave={addItem}
         seeds={seeds.packets}
         onTakeSeeds={seeds.takeSeeds}
+        onAddSeeds={() => {
+          setAdding(false);
+          setStocking(true);
+        }}
       />
       <ItemDetailModal
         item={selected}
