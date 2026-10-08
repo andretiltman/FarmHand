@@ -8,12 +8,14 @@ import { AddItemModal } from './src/components/AddItemModal';
 import { HomeAssistantModal } from './src/components/HomeAssistantModal';
 import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
+import { SeedsModal } from './src/components/SeedsModal';
 import { TransferModal } from './src/components/TransferModal';
 import { SectionKey, sections } from './src/sections';
 import { colors, radius } from './src/theme';
 import { CareKind } from './src/types';
 import { useHomeAssistant } from './src/useHomeAssistant';
 import { useItems } from './src/useItems';
+import { useSeeds } from './src/useSeeds';
 
 export default function App() {
   return (
@@ -55,10 +57,14 @@ function HomeScreen() {
     removePhoto,
     undoLast,
   } = useItems();
+  const seeds = useSeeds();
   const homeAssistant = useHomeAssistant(items, loaded, { itemsRef, deletedRef, applySnapshot });
   const [adding, setAdding] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [stocking, setStocking] = useState(false);
   const [transferring, setTransferring] = useState(false);
+  /** Set when a seed packet's Send button opens the transfer popup on "Send seeds". */
+  const [sendPacketId, setSendPacketId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Set when a card's care button opens the details popup to pick which named animals it was for. */
   const [startCare, setStartCare] = useState<CareKind | null>(null);
@@ -114,11 +120,20 @@ function HomeScreen() {
           </Text>
         </View>
         <Pressable
+          onPress={() => setStocking(true)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.haButton, pressed && { opacity: 0.7 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Seed inventory"
+        >
+          <Text style={styles.haIcon}>🌰</Text>
+        </Pressable>
+        <Pressable
           onPress={() => setTransferring(true)}
           hitSlop={8}
           style={({ pressed }) => [styles.haButton, pressed && { opacity: 0.7 }]}
           accessibilityRole="button"
-          accessibilityLabel="Send or receive plants"
+          accessibilityLabel="Send or receive plants and seeds"
         >
           <Text style={styles.haIcon}>📤</Text>
         </Pressable>
@@ -248,15 +263,44 @@ function HomeScreen() {
       />
       <TransferModal
         visible={transferring}
-        onClose={() => setTransferring(false)}
+        onClose={() => {
+          setTransferring(false);
+          setSendPacketId(null);
+        }}
         items={items}
         onImport={importPlants}
         onRemove={removeItems}
         onUpdateGrowth={updateGrowth}
         deletedRef={deletedRef}
         onSync={applySnapshot}
+        seeds={seeds.packets}
+        onImportSeeds={seeds.importSeeds}
+        onTakeSeeds={seeds.takeSeeds}
+        sendPacketId={sendPacketId}
       />
-      <AddItemModal visible={adding} onClose={() => setAdding(false)} onSave={addItem} />
+      <SeedsModal
+        visible={stocking}
+        onClose={() => setStocking(false)}
+        packets={seeds.packets}
+        onAdd={seeds.addSeeds}
+        onSetCount={seeds.setSeedCount}
+        onRemove={seeds.removePacket}
+        onAddPhoto={seeds.addSeedPhoto}
+        onSetPhotoDate={seeds.setSeedPhotoDate}
+        onRemovePhoto={seeds.removeSeedPhoto}
+        onSend={(id) => {
+          setStocking(false);
+          setSendPacketId(id);
+          setTransferring(true);
+        }}
+      />
+      <AddItemModal
+        visible={adding}
+        onClose={() => setAdding(false)}
+        onSave={addItem}
+        seeds={seeds.packets}
+        onTakeSeeds={seeds.takeSeeds}
+      />
       <ItemDetailModal
         item={selected}
         onClose={() => {

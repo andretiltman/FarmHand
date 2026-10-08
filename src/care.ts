@@ -33,6 +33,8 @@ export interface SpeciesPreset {
   tracksEggs: boolean;
   /** Name placeholder. */
   example: string;
+  /** Sizes with their usual feeding interval, for animals that eat less often as they grow (snakes). */
+  sizes?: { label: string; feedEvery: number }[];
 }
 
 export const SPECIES_PRESETS: SpeciesPreset[] = [
@@ -41,6 +43,21 @@ export const SPECIES_PRESETS: SpeciesPreset[] = [
   { name: 'Quail', emoji: '🐦', care: ['feed'], careEvery: {}, tracksEggs: true, example: 'The Quails' },
   { name: 'Dog', emoji: '🐕', care: ['feed', 'walk', 'groom'], careEvery: { groom: 7 }, tracksEggs: false, example: 'Rex' },
   { name: 'Horse', emoji: '🐴', care: ['feed', 'groom', 'ride'], careEvery: { groom: 1 }, tracksEggs: false, example: 'Storm' },
+  {
+    name: 'Snake',
+    emoji: '🐍',
+    care: ['feed'],
+    careEvery: { feed: 7 },
+    tracksEggs: false,
+    example: 'Noodle',
+    sizes: [
+      { label: 'Hatchling', feedEvery: 5 },
+      { label: 'Juvenile', feedEvery: 7 },
+      { label: 'Sub-adult', feedEvery: 10 },
+      { label: 'Adult', feedEvery: 14 },
+      { label: 'Large adult', feedEvery: 21 },
+    ],
+  },
 ];
 
 export function findSpecies(species: string): SpeciesPreset | undefined {

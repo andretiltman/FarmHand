@@ -1,19 +1,23 @@
 import { MutableRefObject, ReactNode, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { findCrop } from '../crops';
+import { plural } from '../dates';
 import { growthStatus } from '../growth';
 import { colors, radius } from '../theme';
 import { getDeviceId } from '../device';
 import { Deleted, MergeResult, SyncSnapshot } from '../sync';
 import {
   packPlants,
+  packSeeds,
   packSync,
   PhotoChoice,
   plantCount,
   photosToSend,
   Received,
   RECENT_PHOTO_DAYS,
+  SeedsFile,
+  seedsFileName,
   splitGrowth,
   syncFileName,
   TransferFile,
@@ -22,7 +26,7 @@ import {
   unpackReceived,
 } from '../transfer';
 import { pickTransferFile, shareTransferFile } from '../transferFile';
-import { Growth, PlantItem, TrackedItem } from '../types';
+import { Growth, PlantItem, SeedPacket, TrackedItem } from '../types';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
@@ -36,6 +40,12 @@ interface Props {
   onUpdateGrowth: (id: string, growth: Growth) => void;
   deletedRef: MutableRefObject<Deleted>;
   onSync: (snapshot: SyncSnapshot) => Promise<MergeResult>;
+  /** The seed inventory. */
+  seeds: SeedPacket[];
+  onImportSeeds: (seeds: SeedPacket[]) => Promise<void>;
+  onTakeSeeds: (packetId: string, count: number) => void;
+  /** Opens straight onto sending seeds, with this packet ticked (from the seed inventory). */
+  sendPacketId?: string | null;
 }
 
 type Step =
@@ -46,11 +56,15 @@ type Step =
   | { kind: 'sync' }
   | { kind: 'receive'; received: Received | null }
   | { kind: 'received'; count: number }
-  | { kind: 'synced'; result: MergeResult };
+  | { kind: 'synced'; result: MergeResult }
+  | { kind: 'sendSeeds' }
+  /** How many seeds were given from each packet. */
+  | { kind: 'sentSeeds'; given: Record<string, number> }
+  | { kind: 'receivedSeeds'; count: number };
 
 /**
- * Send plants to another phone as a file (via WhatsApp, email, Bluetooth, …), add plants someone sent you,
- * or sync everything with another phone by swapping sync files.
+ * Send plants or seeds to another phone as a file (via WhatsApp, email, Bluetooth, …), add plants or seeds
+ * someone sent you, or sync everything with another phone by swapping sync files.
  */
 export function TransferModal({
   visible,
@@ -61,6 +75,10 @@ export function TransferModal({
   onUpdateGrowth,
   deletedRef,
   onSync,
+  seeds,
+  onImportSeeds,
+  onTakeSeeds,
+  sendPacketId,
 }: Props) {
   const plants = items.filter((i): i is PlantItem => i.kind === 'plant');
   const [step, setStep] = useState<Step>({ kind: 'menu' });
@@ -69,19 +87,24 @@ export function TransferModal({
   const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [includePhotos, setIncludePhotos] = useState(true);
   const [syncPhotos, setSyncPhotos] = useState<PhotoChoice>('recent');
+  const [seedSelected, setSeedSelected] = useState<string[]>([]);
+  /** How many seeds to give from each packet (all of them when not set). */
+  const [seedAmounts, setSeedAmounts] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
-      setStep({ kind: 'menu' });
+      setStep(sendPacketId ? { kind: 'sendSeeds' } : { kind: 'menu' });
       setSelected([]);
       setAmounts({});
+      setSeedSelected(sendPacketId ? [sendPacketId] : []);
+      setSeedAmounts({});
       setIncludePhotos(true);
       setSyncPhotos('recent');
       setError(null);
     }
-  }, [visible]);
+  }, [visible, sendPacketId]);
 
   const go = (next: Step) => {
     setError(null);
@@ -143,6 +166,29 @@ export function TransferModal({
       go({ kind: 'synced', result: await onSync(snapshot) });
     });
 
+  const packets = seeds.filter((p) => p.count > 0);
+  const chosenSeeds = packets.filter((p) => seedSelected.includes(p.id));
+  const seedAmountOf = (p: SeedPacket) => Math.min(seedAmounts[p.id] ?? p.count, p.count);
+  const seedCount = chosenSeeds.reduce((n, p) => n + seedAmountOf(p), 0);
+  const seedPhotoCount = chosenSeeds.reduce((n, p) => n + p.photos.length, 0);
+  const allSeedsSelected = packets.length > 0 && seedSelected.length === packets.length;
+  const toggleSeeds = (id: string) =>
+    setSeedSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const sendSeeds = () =>
+    run(async () => {
+      const given = Object.fromEntries(chosenSeeds.map((p) => [p.id, seedAmountOf(p)]));
+      const toSend = chosenSeeds.map((p) => ({ ...p, count: given[p.id] }));
+      await shareTransferFile(seedsFileName(toSend), await packSeeds(toSend, includePhotos));
+      go({ kind: 'sentSeeds', given });
+    });
+
+  const receiveSeeds = (file: SeedsFile) =>
+    run(async () => {
+      await onImportSeeds(file.seeds);
+      go({ kind: 'receivedSeeds', count: file.seeds.reduce((n, p) => n + p.count, 0) });
+    });
+
   const receive = (file: TransferFile) =>
     run(async () => {
       await onImport(file.plants);
@@ -153,11 +199,11 @@ export function TransferModal({
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const allSelected = plants.length > 0 && selected.length === plants.length;
 
-  const photoSwitch =
-    photoCount > 0 ? (
+  const photoSwitch = (count: number) =>
+    count > 0 ? (
       <View style={styles.switchRow}>
         <View style={styles.flex}>
-          <Text style={styles.switchLabel}>Include photos ({photoCount})</Text>
+          <Text style={styles.switchLabel}>Include photos ({count})</Text>
           <Text style={styles.hint}>Photos make the file much bigger.</Text>
         </View>
         <Switch
@@ -168,7 +214,7 @@ export function TransferModal({
       </View>
     ) : null;
 
-  let title = 'Send or receive plants';
+  let title = 'Send or receive';
   let body: ReactNode;
   let footer: ReactNode = null;
 
@@ -177,18 +223,30 @@ export function TransferModal({
       body = (
         <>
           <Text style={styles.help}>
-            Move plants to someone else's phone – with their whole journey, watering history, tags and photos – or
-            sync with a phone you share the garden with.
+            Move plants to someone else's phone – with their whole journey, watering history, tags and photos – share
+            seeds from your inventory, or sync with a phone you share the garden with.
           </Text>
           <View style={styles.choiceRow}>
             <Choice emoji="📤" title="Send" desc="Share plants as a file" onPress={() => go({ kind: 'send' })} />
             <Choice
               emoji="📥"
               title="Receive"
-              desc="Add plants someone sent you"
+              desc="Add plants or seeds someone sent you"
               onPress={() => go({ kind: 'receive', received: null })}
             />
           </View>
+          <Pressable
+            onPress={() => go({ kind: 'sendSeeds' })}
+            style={({ pressed }) => [styles.syncChoice, styles.seedsChoice, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Send seeds"
+          >
+            <Text style={styles.syncEmoji}>🌰</Text>
+            <View style={styles.flex}>
+              <Text style={[styles.choiceTitle, styles.noMargin]}>Send seeds</Text>
+              <Text style={styles.syncDesc}>Give someone seeds from your inventory, with photos of the packet</Text>
+            </View>
+          </Pressable>
           <Pressable
             onPress={() => go({ kind: 'sync' })}
             style={({ pressed }) => [styles.syncChoice, pressed && styles.pressed]}
@@ -244,7 +302,7 @@ export function TransferModal({
                 </View>
               );
             })}
-            {photoSwitch}
+            {photoSwitch(photoCount)}
             {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
           </ScrollView>
         );
@@ -307,6 +365,106 @@ export function TransferModal({
       );
       break;
     }
+
+    case 'sendSeeds':
+      title = 'Send seeds';
+      body =
+        packets.length === 0 ? (
+          <Text style={styles.help}>You don't have any seeds to send yet – add some with the 🌰 button first.</Text>
+        ) : (
+          <ScrollView style={styles.list}>
+            <Pressable
+              onPress={() => setSeedSelected(allSeedsSelected ? [] : packets.map((p) => p.id))}
+              style={({ pressed }) => [styles.selectAll, pressed && styles.pressed]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.selectAllText}>{allSeedsSelected ? 'Select none' : 'Select all'}</Text>
+            </Pressable>
+            {packets.map((p) => {
+              const checked = seedSelected.includes(p.id);
+              return (
+                <View key={p.id}>
+                  <SeedRow packet={p} checked={checked} onPress={() => toggleSeeds(p.id)} />
+                  {checked && p.count > 1 ? (
+                    <View style={styles.amount}>
+                      <Text style={styles.amountLabel}>How many to give?</Text>
+                      <Stepper
+                        label={`${p.name} seeds to give`}
+                        value={seedAmountOf(p)}
+                        onChange={(n) => setSeedAmounts((prev) => ({ ...prev, [p.id]: n }))}
+                        min={1}
+                        max={p.count}
+                        suffix={`of ${p.count}`}
+                      />
+                      <Text style={styles.hint}>
+                        {seedAmountOf(p) === p.count ? 'All of them' : `${p.count - seedAmountOf(p)} stay with you`}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+            {photoSwitch(seedPhotoCount)}
+            {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
+          </ScrollView>
+        );
+      footer = (
+        <>
+          <Button label="Back" variant="secondary" onPress={() => go({ kind: 'menu' })} />
+          <Button
+            label={busy ? 'Preparing…' : seedCount > 0 ? `Send ${plural(seedCount, 'seed')}` : 'Send'}
+            onPress={sendSeeds}
+            disabled={busy || chosenSeeds.length === 0}
+          />
+        </>
+      );
+      break;
+
+    case 'sentSeeds': {
+      const given = Object.entries(step.given);
+      const total = given.reduce((n, [, c]) => n + c, 0);
+      title = 'Sent?';
+      body = (
+        <>
+          <Text style={styles.help}>
+            Once the other person has added the seeds on their phone (📥 Receive), take the {plural(total, 'seed')} you
+            gave out of your inventory – or keep them if you didn't hand them over after all.
+          </Text>
+          {given.map(([id, count]) => {
+            const packet = seeds.find((p) => p.id === id);
+            return packet ? (
+              <Text key={id} style={[styles.hint, styles.spaced]}>
+                {packet.name}: {Math.max(0, packet.count - count)} will stay with you.
+              </Text>
+            ) : null;
+          })}
+        </>
+      );
+      footer = (
+        <>
+          <Button label="Keep them" variant="secondary" onPress={onClose} />
+          <Button
+            label="Take them out"
+            onPress={() => {
+              given.forEach(([id, count]) => onTakeSeeds(id, count));
+              onClose();
+            }}
+          />
+        </>
+      );
+      break;
+    }
+
+    case 'receivedSeeds':
+      title = 'Seeds added';
+      body = (
+        <Text style={styles.help}>
+          ✅ {plural(step.count, 'seed')} {step.count === 1 ? 'was' : 'were'} added to your seed inventory (🌰). Let the
+          sender know so they can take them out of theirs.
+        </Text>
+      );
+      footer = <Button label="Done" onPress={onClose} />;
+      break;
 
     case 'sync':
       title = 'Sync with another phone';
@@ -373,7 +531,7 @@ export function TransferModal({
         body = (
           <>
             <Text style={styles.help}>
-              Ask the other person to tap 📤 Send or Sync. When the file arrives (e.g. in WhatsApp or your email), save it to your
+              Ask the other person to tap 📤 Send, 🌰 Send seeds or 🔄 Sync. When the file arrives (e.g. in WhatsApp or your email), save it to your
               phone, then choose it here.
             </Text>
             {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
@@ -401,6 +559,32 @@ export function TransferModal({
           <>
             <Button label="Cancel" variant="secondary" onPress={() => go({ kind: 'receive', received: null })} />
             <Button label={busy ? 'Syncing…' : 'Sync'} onPress={() => merge(snapshot)} disabled={busy} />
+          </>
+        );
+      } else if (step.received.kind === 'seeds') {
+        const file = step.received.file;
+        const total = file.seeds.reduce((n, p) => n + p.count, 0);
+        title = 'Receive seeds';
+        body = (
+          <ScrollView style={styles.list}>
+            <Text style={styles.help}>
+              {file.seeds.length === 1 ? 'These seeds' : `Seeds from ${file.seeds.length} packets`} will be added to your
+              seed inventory:
+            </Text>
+            {file.seeds.map((p, i) => (
+              <SeedRow key={`${p.id}-${i}`} packet={p} />
+            ))}
+            {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
+          </ScrollView>
+        );
+        footer = (
+          <>
+            <Button label="Cancel" variant="secondary" onPress={() => go({ kind: 'receive', received: null })} />
+            <Button
+              label={busy ? 'Adding…' : `Add ${plural(total, 'seed')}`}
+              onPress={() => receiveSeeds(file)}
+              disabled={busy}
+            />
           </>
         );
       } else {
@@ -482,6 +666,48 @@ function Choice({ emoji, title, desc, onPress }: { emoji: string; title: string;
   );
 }
 
+function SeedRow({ packet, checked, onPress }: { packet: SeedPacket; checked?: boolean; onPress?: () => void }) {
+  const crop = findCrop(packet.cropId);
+  const photo = packet.photos[0];
+  let detail = plural(packet.count, 'seed');
+  if (crop && crop.name !== packet.name) detail = `${crop.name} · ${detail}`;
+  if (packet.photos.length > 0) detail += ` · ${plural(packet.photos.length, 'photo')}`;
+  const content = (
+    <>
+      {photo ? (
+        <Image source={{ uri: photo.uri }} style={styles.rowPhoto} />
+      ) : (
+        <Text style={styles.rowEmoji}>{crop?.emoji ?? '🌰'}</Text>
+      )}
+      <View style={styles.flex}>
+        <Text style={styles.rowName} numberOfLines={1}>
+          {packet.name}
+        </Text>
+        <Text style={styles.rowDetail} numberOfLines={1}>
+          {detail}
+        </Text>
+      </View>
+      {onPress ? (
+        <View style={[styles.check, checked && styles.checkOn]}>
+          {checked ? <Text style={styles.checkMark}>✓</Text> : null}
+        </View>
+      ) : null}
+    </>
+  );
+  if (!onPress) return <View style={styles.row}>{content}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, checked && styles.rowOn, pressed && styles.pressed]}
+      accessibilityRole="checkbox"
+      aria-checked={checked}
+      accessibilityLabel={`${packet.name}, ${plural(packet.count, 'seed')}`}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
 function PlantRow({ plant, checked, onPress }: { plant: PlantItem; checked?: boolean; onPress?: () => void }) {
   const crop = plant.growth && findCrop(plant.growth.cropId);
   let detail = plant.growth ? growthStatus(plant.growth).headline : `Water every ${plant.waterEveryDays} days`;
@@ -551,6 +777,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   syncEmoji: { fontSize: 34 },
+  seedsChoice: { borderColor: colors.plant, backgroundColor: colors.plantSoft },
   syncDesc: { fontSize: 13, color: colors.muted, marginTop: 2 },
   spaced: { marginTop: 12 },
   photosLabel: { marginTop: 18, marginBottom: 8 },
@@ -591,6 +818,7 @@ const styles = StyleSheet.create({
   },
   rowOn: { borderColor: colors.plant, backgroundColor: colors.plantSoft },
   rowEmoji: { fontSize: 26 },
+  rowPhoto: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.background },
   rowName: { fontSize: 16, fontWeight: '600', color: colors.text },
   rowDetail: { fontSize: 13, color: colors.muted, marginTop: 2 },
   check: {

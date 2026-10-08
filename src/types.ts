@@ -59,6 +59,19 @@ export interface PlantItem extends Syncable {
   createdAt: string;
 }
 
+/** A packet (or jar) of seeds on hand, not yet sown. Kept on this phone only (not synced). */
+export interface SeedPacket {
+  id: string;
+  /** Crop catalog id, or "other". */
+  cropId: string;
+  /** e.g. "Cherry tomato" – defaults to the crop's name. */
+  name: string;
+  count: number;
+  /** Photos of the packet, newest first. */
+  photos: PlantPhoto[];
+  addedAt: string;
+}
+
 export interface EggLog {
   /** ISO timestamp of when the eggs were collected. */
   date: string;
