@@ -7,7 +7,19 @@ import { newId } from './ids';
 import { deletePhoto, saveDataUrlPhoto, savePhoto } from './photoStorage';
 import { Deleted, markRemoved, mergeSnapshot, MergeResult, removedKey, stamp, SyncSnapshot } from './sync';
 import { TransferPlant } from './transfer';
-import { AnimalItem, CareKind, CareLog, Growth, NewItem, PlantItem, PlantPhoto, TaskItem, TrackedItem } from './types';
+import {
+  AnimalItem,
+  CareKind,
+  CareLog,
+  Growth,
+  hasPhotos,
+  NewItem,
+  PhotoItem,
+  PlantItem,
+  PlantPhoto,
+  TaskItem,
+  TrackedItem,
+} from './types';
 
 const STORAGE_KEY = 'farmhand.items.v1';
 /** Ids of deleted items, so syncing with another phone doesn't bring them back. */
@@ -33,6 +45,7 @@ function migrate(item: TrackedItem): TrackedItem {
         walks: careLogs(item.walks),
         groomings: careLogs(item.groomings),
         rides: careLogs(item.rides),
+        photos: item.photos ?? [],
       };
     case 'plant':
       return { ...item, waterings: item.waterings ?? [], photos: item.photos ?? [], tags: item.tags ?? [] };
@@ -87,8 +100,8 @@ function undoTask(task: TaskItem): TaskItem {
 }
 
 function deletePhotoFiles(before: TrackedItem[], after: TrackedItem[]) {
-  const kept = new Set(after.flatMap((i) => (i.kind === 'plant' ? i.photos.map((p) => p.uri) : [])));
-  for (const i of before) if (i.kind === 'plant') for (const p of i.photos) if (!kept.has(p.uri)) deletePhoto(p.uri);
+  const kept = new Set(after.flatMap((i) => (hasPhotos(i) ? i.photos.map((p) => p.uri) : [])));
+  for (const i of before) if (hasPhotos(i)) for (const p of i.photos) if (!kept.has(p.uri)) deletePhoto(p.uri);
 }
 
 /** All tracked plants, animals and maintenance tasks, persisted on-device with AsyncStorage. */
@@ -148,13 +161,19 @@ export function useItems() {
     [update],
   );
 
+  const updatePhotos = useCallback(
+    (id: string, change: (photos: PlantPhoto[], item: PhotoItem) => Partial<PhotoItem>) =>
+      update(id, (i) => (hasPhotos(i) ? ({ ...i, ...change(i.photos, i) } as TrackedItem) : i)),
+    [update],
+  );
+
   const addItem = useCallback((input: NewItem) => {
     const base = { id: newId(), createdAt: new Date().toISOString() };
     const item: TrackedItem =
       input.kind === 'plant'
         ? { ...input, ...base, waterings: [], photos: [] }
         : input.kind === 'animal'
-          ? { ...input, ...base, eggs: [], feedings: [], walks: [], groomings: [], rides: [] }
+          ? { ...input, ...base, eggs: [], feedings: [], walks: [], groomings: [], rides: [], photos: [] }
           : { ...input, ...base };
     setItems((prev) => [item, ...prev]);
   }, []);
@@ -172,28 +191,27 @@ export function useItems() {
 
   const removeItem = useCallback((id: string) => removeItems([id]), [removeItems]);
 
-  /** Adds plants received from another phone as copies, with new ids so they never clash with plants already here. */
-  /** Adds plants, animals and tasks someone sent, as new entries (with plant photos saved to this phone). */
+  /** Adds plants, animals and tasks someone sent, as new entries (with their photos saved to this phone). */
   const importItems = useCallback(async (plants: TransferPlant[], others: (AnimalItem | TaskItem)[]) => {
     const added: TrackedItem[] = [];
-    for (const plant of plants) {
-      const photos: PlantPhoto[] = [];
-      for (const photo of plant.photos) {
-        const photoId = newId();
-        try {
-          const uri = await saveDataUrlPhoto(photo.uri, photoId);
-          photos.push({ id: photoId, uri, takenAt: photo.takenAt, addedAt: photo.addedAt });
-        } catch (e) {
-          console.warn('Skipping a photo that could not be saved', e);
-        }
-      }
-      // A copy is a new plant, so it starts without the sender's sync history.
-      const { changed: _changed, removed: _removed, ...rest } = plant;
-      added.push(migrate({ ...rest, id: newId(), photos }));
-    }
-    for (const item of others) {
+    for (const item of [...plants, ...others]) {
+      // A copy is a new item, so it starts without the sender's sync history.
       const { changed: _changed, removed: _removed, ...rest } = item;
-      added.push(migrate({ ...rest, id: newId() }));
+      const copy = migrate({ ...rest, id: newId() } as TrackedItem);
+      if (hasPhotos(copy)) {
+        const photos: PlantPhoto[] = [];
+        for (const photo of copy.photos) {
+          const photoId = newId();
+          try {
+            const uri = await saveDataUrlPhoto(photo.uri, photoId);
+            photos.push({ id: photoId, uri, takenAt: photo.takenAt, addedAt: photo.addedAt });
+          } catch (e) {
+            console.warn('Skipping a photo that could not be saved', e);
+          }
+        }
+        copy.photos = photos;
+      }
+      added.push(copy);
     }
     setItems((prev) => [...added, ...prev]);
   }, []);
@@ -205,10 +223,10 @@ export function useItems() {
   const applySnapshot = useCallback(async (snapshot: SyncSnapshot): Promise<MergeResult> => {
     let incoming = snapshot.items.map(migrate);
     if (snapshot.includesPhotos) {
-      const known = new Set(itemsRef.current.flatMap((i) => (i.kind === 'plant' ? i.photos.map((p) => p.id) : [])));
+      const known = new Set(itemsRef.current.flatMap((i) => (hasPhotos(i) ? i.photos.map((p) => p.id) : [])));
       const saved: TrackedItem[] = [];
       for (const item of incoming) {
-        if (item.kind !== 'plant') {
+        if (!hasPhotos(item)) {
           saved.push(item);
           continue;
         }
@@ -268,35 +286,35 @@ export function useItems() {
       const uri = await savePhoto(pickedUri, photoId);
       const now = new Date().toISOString();
       const photo: PlantPhoto = { id: photoId, uri, takenAt: now, addedAt: now };
-      updatePlant(id, (p) => ({ ...p, photos: [photo, ...p.photos] }));
+      updatePhotos(id, (photos) => ({ photos: [photo, ...photos] }));
     },
-    [updatePlant],
+    [updatePhotos],
   );
 
   const setPhotoDate = useCallback(
     (id: string, photoId: string, takenAt: string) =>
-      updatePlant(id, (p) =>
+      updatePhotos(id, (photos, item) =>
         stamp(
           {
-            ...p,
-            photos: p.photos
+            ...item,
+            photos: photos
               .map((ph) => (ph.id === photoId ? { ...ph, takenAt } : ph))
               .sort((a, b) => (a.takenAt < b.takenAt ? 1 : a.takenAt > b.takenAt ? -1 : 0)),
           },
           removedKey.photo(photoId),
         ),
       ),
-    [updatePlant],
+    [updatePhotos],
   );
 
   const removePhoto = useCallback(
     (id: string, photoId: string) =>
-      updatePlant(id, (p) => {
-        const photo = p.photos.find((ph) => ph.id === photoId);
+      updatePhotos(id, (photos, item) => {
+        const photo = photos.find((ph) => ph.id === photoId);
         if (photo) deletePhoto(photo.uri);
-        return markRemoved({ ...p, photos: p.photos.filter((ph) => ph.id !== photoId) }, removedKey.photo(photoId));
+        return markRemoved({ ...item, photos: photos.filter((ph) => ph.id !== photoId) }, removedKey.photo(photoId));
       }),
-    [updatePlant],
+    [updatePhotos],
   );
 
   const waterPlant = useCallback(

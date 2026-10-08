@@ -1,4 +1,4 @@
-import { CareLog, EggLog, PlantPhoto, TrackedItem } from './types';
+import { CareLog, EggLog, hasPhotos, PlantPhoto, TrackedItem } from './types';
 
 /**
  * Keeping two phones in sync.
@@ -110,17 +110,20 @@ export function mergeItem<T extends TrackedItem>(a: T, b: T, photos: boolean): T
     for (const e of [...a.eggs, ...b.eggs]) if (!eggs.has(e.date)) eggs.set(e.date, e);
     out.eggs = [...eggs.values()].filter((e) => !gone.has(removedKey.egg(e.date))).sort((x, y) => byNewest(x.date, y.date));
   }
-  if (a.kind === 'plant' && b.kind === 'plant') {
-    const mine = new Map(a.photos.map((p) => [p.id, p]));
+  if (hasPhotos(a) && hasPhotos(b)) {
+    // Animals from before photos were added to them have none.
+    const aPhotos = a.photos ?? [];
+    const bPhotos = b.photos ?? [];
+    const mine = new Map(aPhotos.map((p) => [p.id, p]));
     const merged: PlantPhoto[] = [];
-    for (const p of a.photos) {
-      const theirs = photos ? b.photos.find((q) => q.id === p.id) : undefined;
+    for (const p of aPhotos) {
+      const theirs = photos ? bPhotos.find((q) => q.id === p.id) : undefined;
       const key = removedKey.photo(p.id);
       // Keep our own file, but take their date if they re-dated it more recently.
       const takenAt = theirs && (b.changed?.[key] ?? '') > (a.changed?.[key] ?? '') ? theirs.takenAt : p.takenAt;
       merged.push({ ...p, takenAt });
     }
-    if (photos) for (const p of b.photos) if (!mine.has(p.id)) merged.push(p);
+    if (photos) for (const p of bPhotos) if (!mine.has(p.id)) merged.push(p);
     out.photos = merged.filter((p) => !gone.has(removedKey.photo(p.id))).sort((x, y) => byNewest(x.takenAt, y.takenAt));
   }
 
@@ -166,7 +169,7 @@ export function mergeSnapshot(
   }
   const fresh = remote.items
     .filter((i) => !ours.has(i.id) && !allDeleted[i.id])
-    .map((i) => (i.kind === 'plant' && !remote.includesPhotos ? { ...i, photos: [] } : i))
+    .map((i) => (hasPhotos(i) && !remote.includesPhotos ? { ...i, photos: [] } : i))
     .sort((x, y) => byNewest(x.createdAt, y.createdAt));
 
   const deletedChanged = Object.keys(allDeleted).length !== Object.keys(deleted).length ||
@@ -193,7 +196,7 @@ export function makeSnapshot(
     deviceId,
     sentAt: new Date().toISOString(),
     includesPhotos,
-    items: includesPhotos ? items : items.map((i) => (i.kind === 'plant' ? { ...i, photos: [] } : i)),
+    items: includesPhotos ? items : items.map((i) => (hasPhotos(i) ? { ...i, photos: [] } : i)),
     deleted,
   };
 }

@@ -150,9 +150,9 @@ export function TransferModal({
   const chosenSeeds = packets.filter((p) => selected.includes(p.id));
   const chosenCount = chosenPlants.length + chosenAnimals.length + chosenTasks.length + chosenSeeds.length;
   const photoCount =
-    chosenPlants.reduce((n, p) => n + p.photos.length, 0) + chosenSeeds.reduce((n, p) => n + p.photos.length, 0);
+    [...chosenPlants, ...chosenAnimals, ...chosenSeeds].reduce((n, p) => n + p.photos.length, 0);
   const syncPhotoCount = (choice: PhotoChoice) =>
-    plants.reduce((n, p) => n + photosToSend(p.photos, choice).length, 0);
+    [...plants, ...animals].reduce((n, p) => n + photosToSend(p.photos, choice).length, 0);
   const allIds = [...plants, ...animals, ...tasks, ...packets].map((i) => i.id);
   const allSelected = allIds.length > 0 && allIds.every((id) => selected.includes(id));
   const toggle = (id: string) =>
@@ -732,9 +732,15 @@ function SeedRow({ packet, checked, onPress }: { packet: SeedPacket; checked?: b
 function AnimalRow({ animal, checked, onPress }: { animal: AnimalItem; checked?: boolean; onPress?: () => void }) {
   let detail = animal.headCount === 1 ? animal.species : `${animal.species} · ${plural(animal.headCount, 'animal')}`;
   if (animal.names.length > 0 && animal.names.join(' ') !== animal.name) detail += ` · ${joinNames(animal.names)}`;
+  if (animal.photos.length > 0) detail += ` · ${plural(animal.photos.length, 'photo')}`;
+  const photo = animal.photos[0];
   const content = (
     <>
-      <Text style={styles.rowEmoji}>{speciesEmoji(animal.species)}</Text>
+      {photo ? (
+        <Image source={{ uri: photo.uri }} style={styles.rowPhoto} />
+      ) : (
+        <Text style={styles.rowEmoji}>{speciesEmoji(animal.species)}</Text>
+      )}
       <View style={styles.flex}>
         <Text style={styles.rowName} numberOfLines={1}>
           {animal.name}
