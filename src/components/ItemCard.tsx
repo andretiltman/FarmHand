@@ -135,7 +135,7 @@ export function ItemCard({ item, onPress, onWater, onCare, onEgg, onDone }: Prop
       accessibilityLabel={`${item.name}, ${line1}, ${line2}`}
     >
       <View style={[styles.icon, { backgroundColor: iconBackground }]}>
-        {item.kind === 'plant' && item.photos[0] ? (
+        {item.kind !== 'task' && item.photos[0] ? (
           <Image source={{ uri: item.photos[0].uri }} style={styles.photo} accessibilityIgnoresInvertColors />
         ) : (
           <Text style={styles.iconText}>{icon}</Text>

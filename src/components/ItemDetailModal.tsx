@@ -7,7 +7,7 @@ import { formatDateTime, relativeDay } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
 import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
-import { AnimalItem, CareKind, Growth, TrackedItem } from '../types';
+import { AnimalItem, CareKind, Growth, hasPhotos, TrackedItem } from '../types';
 import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
@@ -167,7 +167,7 @@ export function ItemDetailModal(props: Props) {
   }
 
   const back = () => setView({ kind: 'main' });
-  const photo = view.kind === 'photo' && item.kind === 'plant' ? item.photos.find((p) => p.id === view.id) : undefined;
+  const photo = view.kind === 'photo' && hasPhotos(item) ? item.photos.find((p) => p.id === view.id) : undefined;
 
   if (view.kind === 'rename') {
     const trimmed = newName.trim();
@@ -476,6 +476,18 @@ export function ItemDetailModal(props: Props) {
               tracksEggs={item.tracksEggs}
               onChange={(care, tracksEggs) => props.onSetCare(item.id, care, tracksEggs)}
               onChangeEvery={(kind, days) => props.onSetCareEvery(item.id, kind, days)}
+            />
+          </View>
+        )}
+
+        {item.kind === 'animal' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Photos</Text>
+            <PhotoLog
+              photos={item.photos}
+              onAdd={(uri) => props.onAddPhoto(item.id, uri)}
+              onOpen={(p) => setView({ kind: 'photo', id: p.id })}
+              emptyText="No photos yet – add one to watch them grow."
             />
           </View>
         )}

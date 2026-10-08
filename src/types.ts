@@ -112,6 +112,8 @@ export interface AnimalItem extends Syncable {
   walks: CareLog[];
   groomings: CareLog[];
   rides: CareLog[];
+  /** Photos of the animals, newest first. */
+  photos: PlantPhoto[];
   createdAt: string;
 }
 
@@ -129,7 +131,12 @@ export interface TaskItem extends Syncable {
 
 export type TrackedItem = PlantItem | AnimalItem | TaskItem;
 
+/** Items that can have photos. */
+export type PhotoItem = PlantItem | AnimalItem;
+
+export const hasPhotos = (item: TrackedItem): item is PhotoItem => item.kind !== 'task';
+
 export type NewItem =
   | Omit<PlantItem, 'id' | 'waterings' | 'photos' | 'createdAt'>
-  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'walks' | 'groomings' | 'rides' | 'createdAt'>
+  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'walks' | 'groomings' | 'rides' | 'photos' | 'createdAt'>
   | Omit<TaskItem, 'id' | 'createdAt'>;

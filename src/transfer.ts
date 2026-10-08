@@ -1,6 +1,6 @@
 import { photoToDataUrl } from './photoStorage';
 import { checkSnapshot, Deleted, isSnapshot, makeSnapshot, SyncSnapshot } from './sync';
-import { AnimalItem, CareLog, Growth, PlantItem, PlantPhoto, SeedPacket, TaskItem, TrackedItem } from './types';
+import { AnimalItem, CareLog, Growth, hasPhotos, PlantItem, PlantPhoto, SeedPacket, TaskItem, TrackedItem } from './types';
 
 /** Marks a file as FarmHand items (plants, animals, tasks and seeds), so we can tell it apart from any other JSON file. */
 const FORMAT = 'farmhand-plants';
@@ -104,12 +104,16 @@ async function embedPhotos(photos: PlantPhoto[]): Promise<PlantPhoto[]> {
 
 /**
  * Packs plants, animals and tasks (with their full history) and seeds (with `count` set to how many are given),
- * optionally with plant and packet photos, into a file's text.
+ * optionally with plant, animal and packet photos, into a file's text.
  */
 export async function packItems(pick: TransferPick, includePhotos: boolean): Promise<string> {
   const plants: TransferPlant[] = [];
   for (const plant of pick.plants) {
     plants.push({ ...plant, photos: includePhotos ? await embedPhotos(plant.photos) : [] });
+  }
+  const animals: AnimalItem[] = [];
+  for (const animal of pick.animals) {
+    animals.push({ ...animal, photos: includePhotos ? await embedPhotos(animal.photos) : [] });
   }
   const seeds: SeedPacket[] = [];
   for (const packet of pick.seeds) {
@@ -121,7 +125,7 @@ export async function packItems(pick: TransferPick, includePhotos: boolean): Pro
     version: pick.animals.length || pick.tasks.length || seeds.length ? VERSION : 1,
     sentAt: new Date().toISOString(),
     plants,
-    animals: pick.animals,
+    animals,
     tasks: pick.tasks,
     seeds,
   };
@@ -165,6 +169,7 @@ function checkItems(file: Partial<TransferFile>): TransferFile {
       ...a,
       species: typeof a.species === 'string' ? a.species : a.name,
       names: Array.isArray(a.names) ? a.names : [],
+      photos: receivedPhotos(a.photos),
     })),
     tasks: tasks.map((t) => ({ ...t, done: Array.isArray(t.done) ? t.done : [] })),
     seeds,
@@ -190,7 +195,7 @@ export function transferFileName({ plants, animals, tasks, seeds }: TransferPick
 export type PhotoChoice = 'none' | 'recent' | 'all';
 export const RECENT_PHOTO_DAYS = 7;
 
-/** The photos a sync file carries for a plant. "Recent" goes by when a photo was added, not the date it shows. */
+/** The photos a sync file carries for a plant or animal. "Recent" goes by when a photo was added, not the date it shows. */
 export function photosToSend(photos: PlantPhoto[], choice: PhotoChoice, now: Date = new Date()): PlantPhoto[] {
   if (choice === 'none') return [];
   if (choice === 'all') return photos;
@@ -212,7 +217,7 @@ export async function packSync(
   if (photoChoice !== 'none') {
     snapshot.items = await Promise.all(
       snapshot.items.map(async (item) => {
-        if (item.kind !== 'plant') return item;
+        if (!hasPhotos(item)) return item;
         return { ...item, photos: await embedPhotos(photosToSend(item.photos, photoChoice)) };
       }),
     );

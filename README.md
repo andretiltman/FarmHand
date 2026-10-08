@@ -33,7 +33,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - Slow, uneven germinators like strawberries (7 days to 8 weeks) show *Should sprout any day* until the slowest expected date, instead of assuming they've sprouted.
   - Timings are typical averages per crop (see `src/crops.ts`); real gardens vary.
 - **Adjust the timeline for your variety** – in a plant's details, tap any stage (Sown, Seedling, Transplant, Harvest) and pick a date on the calendar. Today or earlier records when it actually happened; a future date changes that plant's estimate. *Reset to the usual timing* undoes a change.
-- **Photo log** – take or choose photos of each plant as it grows. Photos are labelled by age (*Day 23*), can be re-dated (handy for older photos from your library) or deleted, and the newest one becomes the plant's icon on the list.
+- **Photo log** – take or choose photos of each plant as it grows. Photos are labelled by age (*Day 23*), can be re-dated (handy for older photos from your library) or deleted, and the newest one becomes the plant's icon on the list. Animals have a photo log too (dated rather than labelled by age), and their newest photo becomes their icon.
 - **Tags** – mark plants as **GMO-free**, **Bush** or **Runner** (a plant can't be both bush and runner), or type your own like *Heirloom*. Tags show on the plant's card, can be changed in its details, and are sent to Home Assistant as a `tags` attribute.
 - **Seasons follow your hemisphere** – worked out from the phone's time zone, so October is spring in South Africa and autumn in Europe.
 - **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, change how often a plant needs watering or a task repeats, rename it (✏️ **Rename**), or delete it.
@@ -113,6 +113,6 @@ src/components/Journey.tsx      Growth timeline
 src/components/CropGuide.tsx    Growing guide card
 src/components/Calendar.tsx     Date picker
 src/components/MilestoneEditor.tsx  Change a stage's date
-src/components/PhotoLog.tsx, PhotoViewer.tsx  Plant photos
+src/components/PhotoLog.tsx, PhotoViewer.tsx  Plant and animal photos
 src/photoStorage(.web).ts       Saving photos on the device (or in the browser)
 ```
