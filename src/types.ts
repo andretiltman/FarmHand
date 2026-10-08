@@ -79,9 +79,9 @@ export interface EggLog {
 }
 
 /** A job an animal needs doing regularly (see care.ts). */
-export type CareKind = 'feed' | 'walk' | 'groom' | 'ride';
+export type CareKind = 'feed' | 'walk' | 'groom' | 'ride' | 'clean';
 
-/** One feeding, walk, grooming or ride. */
+/** One feeding, walk, grooming, ride or clean-out. */
 export interface CareLog {
   /** ISO timestamp. */
   date: string;
@@ -107,11 +107,12 @@ export interface AnimalItem extends Syncable {
   tracksEggs: boolean;
   /** Egg collections, newest first. */
   eggs: EggLog[];
-  /** Each feeding, walk, grooming and ride, newest first. */
+  /** Each feeding, walk, grooming, ride and clean-out of the coop or stable, newest first. */
   feedings: CareLog[];
   walks: CareLog[];
   groomings: CareLog[];
   rides: CareLog[];
+  cleanings: CareLog[];
   /** Photos of the animals, newest first. */
   photos: PlantPhoto[];
   createdAt: string;
@@ -138,5 +139,5 @@ export const hasPhotos = (item: TrackedItem): item is PhotoItem => item.kind !==
 
 export type NewItem =
   | Omit<PlantItem, 'id' | 'waterings' | 'photos' | 'createdAt'>
-  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'walks' | 'groomings' | 'rides' | 'photos' | 'createdAt'>
+  | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'walks' | 'groomings' | 'rides' | 'cleanings' | 'photos' | 'createdAt'>
   | Omit<TaskItem, 'id' | 'createdAt'>;

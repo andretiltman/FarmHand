@@ -45,6 +45,7 @@ function migrate(item: TrackedItem): TrackedItem {
         walks: careLogs(item.walks),
         groomings: careLogs(item.groomings),
         rides: careLogs(item.rides),
+        cleanings: careLogs(item.cleanings),
         photos: item.photos ?? [],
       };
     case 'plant':
@@ -78,7 +79,7 @@ function undoPlant(plant: PlantItem): PlantItem {
   return stamp({ ...plant, growth }, 'growth');
 }
 
-/** Removes the newest feeding, walk, grooming, ride or egg collection from an animal. */
+/** Removes the newest feeding, walk, grooming, ride, clean-out or egg collection from an animal. */
 function undoAnimal(animal: AnimalItem): AnimalItem {
   const lastEgg = animal.eggs[0]?.date ?? '';
   let newest: { date: string; field: CareJob['field'] } | null = null;
@@ -173,7 +174,7 @@ export function useItems() {
       input.kind === 'plant'
         ? { ...input, ...base, waterings: [], photos: [] }
         : input.kind === 'animal'
-          ? { ...input, ...base, eggs: [], feedings: [], walks: [], groomings: [], rides: [], photos: [] }
+          ? { ...input, ...base, eggs: [], feedings: [], walks: [], groomings: [], rides: [], cleanings: [], photos: [] }
           : { ...input, ...base };
     setItems((prev) => [item, ...prev]);
   }, []);
@@ -348,7 +349,7 @@ export function useItems() {
     [updateAnimal],
   );
 
-  /** Logs a feeding, walk, grooming or ride as of now – for `who` of the named animals, or all of them. */
+  /** Logs a feeding, walk, grooming, ride or clean-out as of now – for `who` of the named animals, or all of them. */
   const logCare = useCallback(
     (id: string, kind: CareKind, who?: string[]) => {
       const { field } = CARE[kind];

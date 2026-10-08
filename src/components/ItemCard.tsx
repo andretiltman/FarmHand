@@ -111,8 +111,8 @@ export function ItemCard({ item, onPress, onWater, onCare, onEgg, onDone }: Prop
         emoji: c.job.emoji,
         label: c.job.verb,
         accessibilityLabel: `Log ${c.job.verb.toLowerCase()} for ${item.name}`,
-        color: colors.plant,
-        soft: colors.plantSoft,
+        color: c.job.color,
+        soft: c.job.soft,
         onPress: () => onCare(c.kind),
       }));
     if (item.tracksEggs) {
@@ -163,7 +163,9 @@ export function ItemCard({ item, onPress, onWater, onCare, onEgg, onDone }: Prop
           accessibilityLabel={a.accessibilityLabel}
         >
           <Text style={styles.actionEmoji}>{a.emoji}</Text>
-          <Text style={[styles.actionLabel, { color: a.color }]}>{a.label}</Text>
+          <Text style={[styles.actionLabel, { color: a.color }]} numberOfLines={1} adjustsFontSizeToFit>
+            {a.label}
+          </Text>
         </Pressable>
       ))}
     </Pressable>
