@@ -82,6 +82,12 @@ npm start        # then scan the QR code with the Expo Go app on your phone
 
 Or run `npm run android`, `npm run ios`, or `npm run web`.
 
+## Website, privacy policy and terms
+
+The `docs/` folder is a small static website for GitHub Pages: a landing page (`index.html`), the privacy policy (`privacy.html`) and the terms and conditions (`terms.html`).
+
+To publish it, in the GitHub repo go to **Settings → Pages**, set **Source** to *Deploy from a branch*, choose the `main` branch and the `/docs` folder, and save. The site then appears at `https://andretiltman.github.io/FarmHand/`, with the privacy policy at `https://andretiltman.github.io/FarmHand/privacy.html` – the link to give the Play Store / App Store.
+
 ## Project layout
 
 ```
