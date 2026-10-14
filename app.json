@@ -16,7 +16,11 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.farmhand.app",
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,9 +36,19 @@
         "expo-image-picker",
         {
           "photosPermission": "FarmHand uses your photos so you can add pictures of your plants as they grow.",
-          "cameraPermission": "FarmHand uses the camera so you can photograph your plants as they grow."
+          "cameraPermission": "FarmHand uses the camera so you can photograph your plants as they grow.",
+          "microphonePermission": false
         }
       ]
-    ]
+    ],
+    "extra": {
+      "expo-navigation-bar": {
+        "hidden": true
+      },
+      "eas": {
+        "projectId": "e3f0c522-06f4-4743-b4d6-9fb6836a5130"
+      }
+    },
+    "owner": "andretiltman"
   }
 }
