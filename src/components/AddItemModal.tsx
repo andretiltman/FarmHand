@@ -7,13 +7,16 @@ import { addDays, approxDays, formatShortDate, plural } from '../dates';
 import { growthStatus } from '../growth';
 import { sowingAdvice } from '../seasons';
 import { colors, radius } from '../theme';
-import { CareKind, Growth, ItemKind, NewItem, SeedPacket, SowMethod } from '../types';
+import { describeSchedule } from '../schedule';
+import { taskSummary } from '../stats';
+import { CareKind, Growth, ItemKind, NewItem, SeedPacket, SowMethod, TaskSchedule } from '../types';
 import { seedsFor } from '../useSeeds';
 import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { NamesEditor } from './NamePicker';
+import { ScheduleEditor } from './ScheduleEditor';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
 import { TagPicker } from './TagPicker';
@@ -38,20 +41,13 @@ const OTHER = 'other';
 
 const WATER_PRESETS = [1, 2, 3, 7, 14];
 /** Common maintenance jobs and how often they're usually done. */
-const TASK_PRESETS: { name: string; everyDays: number }[] = [
+const TASK_PRESETS: { name: string; everyDays: number; schedule?: TaskSchedule }[] = [
+  { name: 'Rubbish collection', everyDays: 7, schedule: { days: [6], time: '08:00' } },
   { name: 'Septic tank bio enzymes', everyDays: 30 },
   { name: 'Clean chicken coop', everyDays: 7 },
   { name: 'Clean gutters', everyDays: 180 },
   { name: 'Clean water tank', everyDays: 365 },
   { name: 'Service lawnmower', everyDays: 180 },
-];
-const TASK_INTERVALS: { days: number; label: string }[] = [
-  { days: 7, label: 'Weekly' },
-  { days: 14, label: 'Fortnightly' },
-  { days: 30, label: 'Monthly' },
-  { days: 90, label: 'Every 3 months' },
-  { days: 180, label: 'Every 6 months' },
-  { days: 365, label: 'Yearly' },
 ];
 
 export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onAddSeeds }: Props) {
@@ -73,6 +69,8 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
   const [careEvery, setCareEvery] = useState<Partial<Record<CareKind, number>>>({});
   const [tracksEggs, setTracksEggs] = useState(true);
   const [everyDays, setEveryDays] = useState(30);
+  /** Set when the task is done on set days of the week rather than every `everyDays`. */
+  const [schedule, setSchedule] = useState<TaskSchedule | undefined>(undefined);
   /** Days since the task was last done; null when it hasn't been done yet. */
   const [lastDoneDaysAgo, setLastDoneDaysAgo] = useState<number | null>(null);
 
@@ -94,6 +92,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
       setNames([]);
       chooseSpecies(SPECIES_PRESETS[0]);
       setEveryDays(30);
+      setSchedule(undefined);
       setLastDoneDaysAgo(null);
     }
   }, [visible]);
@@ -148,7 +147,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
   }
 
   const lastDoneAt = lastDoneDaysAgo === null ? null : addDays(new Date(), -lastDoneDaysAgo);
-  const nextDue = lastDoneAt ? addDays(lastDoneAt, everyDays) : new Date();
+  const taskDone = lastDoneAt ? [lastDoneAt.toISOString()] : [];
 
   const save = () => {
     if (!kind || !trimmedName) return;
@@ -167,14 +166,15 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
               careEvery,
               tracksEggs,
             }
-          : { kind, name: trimmedName, everyDays, done: lastDoneAt ? [lastDoneAt.toISOString()] : [] },
+          : { kind, name: trimmedName, everyDays, schedule, done: taskDone },
     );
     onClose();
   };
 
-  const chooseTaskPreset = (p: { name: string; everyDays: number }) => {
+  const chooseTaskPreset = (p: (typeof TASK_PRESETS)[number]) => {
     setName(p.name);
     setEveryDays(p.everyDays);
+    setSchedule(p.schedule);
   };
 
   const titles: Record<Step, string> = {
@@ -422,24 +422,13 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
                 ))}
               </View>
 
-              <Text style={styles.label}>Repeat every</Text>
-              <Stepper
-                label="Repeat interval"
-                value={everyDays}
-                onChange={setEveryDays}
-                suffix={everyDays === 1 ? 'day' : 'days'}
+              <Text style={styles.label}>Repeat</Text>
+              <ScheduleEditor
+                everyDays={everyDays}
+                schedule={schedule}
+                onChangeEvery={setEveryDays}
+                onChangeSchedule={setSchedule}
               />
-              <View style={styles.chips}>
-                {TASK_INTERVALS.map((t) => (
-                  <Chip
-                    key={t.days}
-                    label={t.label}
-                    selected={everyDays === t.days}
-                    color={colors.task}
-                    onPress={() => setEveryDays(t.days)}
-                  />
-                ))}
-              </View>
 
               <Text style={styles.label}>When was it last done?</Text>
               <View style={styles.chips}>
@@ -569,7 +558,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
                     .join(' · ')
                 : isTask
                   ? [
-                      `every ${plural(everyDays, 'day')}`,
+                      schedule ? describeSchedule(schedule) : `every ${plural(everyDays, 'day')}`,
                       lastDoneAt ? `last done ${formatShortDate(lastDoneAt)}` : 'not done yet',
                     ].join(' · ')
                   : [
@@ -585,7 +574,11 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
             </Text>
             {isTask && (
               <Text style={[styles.reviewHeadline, { color: colors.task }]}>
-                {lastDoneAt && nextDue > new Date() ? `Next due ${formatShortDate(nextDue)}` : 'Due now'}
+                {schedule
+                  ? taskSummary({ kind, id: '', name: trimmedName, everyDays, schedule, done: taskDone, createdAt: new Date().toISOString() }).dueLabel
+                  : lastDoneAt && addDays(lastDoneAt, everyDays) > new Date()
+                    ? `Next due ${formatShortDate(addDays(lastDoneAt, everyDays))}`
+                    : 'Due now'}
               </Text>
             )}
             {growth && (

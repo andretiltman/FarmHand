@@ -5,6 +5,7 @@ import { joinNames, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
 import { plural } from '../dates';
 import { growthStatus } from '../growth';
+import { describeSchedule, validSchedule } from '../schedule';
 import { colors, radius } from '../theme';
 import { getDeviceId } from '../device';
 import { Deleted, MergeResult, SyncSnapshot } from '../sync';
@@ -771,6 +772,7 @@ function AnimalRow({ animal, checked, onPress }: { animal: AnimalItem; checked?:
 }
 
 function TaskRow({ task, checked, onPress }: { task: TaskItem; checked?: boolean; onPress?: () => void }) {
+  const schedule = validSchedule(task.schedule);
   const content = (
     <>
       <Text style={styles.rowEmoji}>🛠️</Text>
@@ -779,7 +781,7 @@ function TaskRow({ task, checked, onPress }: { task: TaskItem; checked?: boolean
           {task.name}
         </Text>
         <Text style={styles.rowDetail} numberOfLines={1}>
-          Every {plural(task.everyDays, 'day')}
+          {schedule ? describeSchedule(schedule).replace(/^every/, 'Every') : `Every ${plural(task.everyDays, 'day')}`}
         </Text>
       </View>
       {onPress ? (

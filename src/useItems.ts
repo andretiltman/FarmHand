@@ -18,6 +18,7 @@ import {
   PlantItem,
   PlantPhoto,
   TaskItem,
+  TaskSchedule,
   TrackedItem,
 } from './types';
 
@@ -340,6 +341,12 @@ export function useItems() {
     [update],
   );
 
+  const setTaskSchedule = useCallback(
+    (id: string, schedule: TaskSchedule | undefined) =>
+      update(id, (i) => (i.kind === 'task' ? stamp({ ...i, schedule }, 'schedule') : i)),
+    [update],
+  );
+
   const logEggs = useCallback(
     (id: string, count: number) => {
       if (count <= 0) return;
@@ -432,6 +439,7 @@ export function useItems() {
     keepAnimals,
     completeTask,
     setTaskEvery,
+    setTaskSchedule,
     advanceStage,
     updateGrowth,
     addPhoto,

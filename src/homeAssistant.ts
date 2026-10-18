@@ -1,6 +1,7 @@
 import { CARE, careEvery, careStatuses } from './care';
 import { findCrop } from './crops';
 import { growthStatus, transplantSuccess } from './growth';
+import { describeSchedule, validSchedule, WEEKDAYS } from './schedule';
 import { animalSummary, plantSummary, taskSummary } from './stats';
 import { checkSnapshot, isSnapshot, SyncSnapshot } from './sync';
 import { TrackedItem } from './types';
@@ -100,6 +101,7 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
       }
     } else if (item.kind === 'task') {
       const s = taskSummary(item, now);
+      const schedule = validSchedule(item.schedule);
       if (s.status !== 'ok') tasksDue++;
       sensors.push({
         entityId,
@@ -110,7 +112,10 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
           kind: 'task',
           due: s.dueLabel,
           days_until_due: s.daysUntilDue,
-          every_days: item.everyDays,
+          every_days: schedule ? null : item.everyDays,
+          schedule: schedule ? describeSchedule(schedule) : null,
+          schedule_days: schedule ? schedule.days.map((d) => WEEKDAYS[d]).join(', ') : null,
+          schedule_time: schedule?.time ?? null,
           last_done: item.done[0] ?? null,
         },
       });

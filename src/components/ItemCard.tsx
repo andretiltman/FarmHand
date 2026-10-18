@@ -4,6 +4,7 @@ import { careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
 import { daysBetween, formatDays } from '../dates';
 import { growthStatus } from '../growth';
+import { shortSchedule, validSchedule } from '../schedule';
 import { animalSummary, DueStatus, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
 import { CareKind, TrackedItem } from '../types';
@@ -72,7 +73,9 @@ export function ItemCard({ item, onPress, onWater, onCare, onEgg, onDone }: Prop
     ];
   } else if (item.kind === 'task') {
     const s = taskSummary(item);
-    line1 = `${s.lastDoneLabel} · every ${item.everyDays === 1 ? 'day' : formatDays(item.everyDays)}`;
+    const schedule = validSchedule(item.schedule);
+    const every = schedule ? shortSchedule(schedule) : `every ${item.everyDays === 1 ? 'day' : formatDays(item.everyDays)}`;
+    line1 = `${s.lastDoneLabel} · ${every}`;
     line2 = s.dueLabel;
     line2Color = statusColor[s.status];
     actions = [
