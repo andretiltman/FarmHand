@@ -60,6 +60,11 @@ export interface PlantItem extends Syncable {
   tags: string[];
   /** Natural inputs (LAB, WCA, …) given, newest first. */
   inputs: InputLog[];
+  /**
+   * The lot (bed, field, tunnel, …) it grows in, e.g. "North field". Tray-sown crops are in the greenhouse until
+   * they're transplanted, whatever this says (see lots.ts) – for them it's the lot they were transplanted to.
+   */
+  lot?: string;
   createdAt: string;
 }
 

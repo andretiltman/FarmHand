@@ -87,26 +87,30 @@ export function PlantInputs({ plant, ready, onGive, onSetFlowered }: PlantInputs
   );
 }
 
-/** Every input that can be given: the recipes, plus your own inputs from batches and the plant's history. */
-export function inputChoices(plant: PlantItem, batches: InputItem[], ready: Set<string>): string[] {
-  const recommended = recommendedInputs(plant, ready).map((r) => r.key);
+/**
+ * Every input that can be given: the recipes, plus your own inputs from batches and the plants' history. Takes
+ * several plants when feeding a whole lot.
+ */
+export function inputChoices(plants: PlantItem[], batches: InputItem[], ready: Set<string>): string[] {
+  const recommended = plants.flatMap((p) => recommendedInputs(p, ready).map((r) => r.key));
   const own = [
     ...batches.filter((b) => b.recipeId === OTHER_INPUT || !findRecipe(b.recipeId)).map(inputKey),
-    ...plant.inputs.flatMap((l) => l.given).filter((k) => !findRecipe(k)),
+    ...plants.flatMap((p) => p.inputs.flatMap((l) => l.given)).filter((k) => !findRecipe(k)),
   ];
   const all = [...RECIPES.map((r) => r.id), ...own];
   return [...new Set([...recommended, ...all])];
 }
 
 /** The inputs to tick as given: those due with a batch ready, else whatever's recommended and ready. */
-export function inputsToTick(plant: PlantItem, ready: Set<string>): string[] {
-  const recommended = recommendedInputs(plant, ready).filter((r) => r.haveReady);
+export function inputsToTick(plants: PlantItem[], ready: Set<string>): string[] {
+  const recommended = plants.flatMap((p) => recommendedInputs(p, ready)).filter((r) => r.haveReady);
   const due = recommended.filter((r) => r.status !== 'ok');
-  return (due.length ? due : recommended).map((r) => r.key);
+  return [...new Set((due.length ? due : recommended).map((r) => r.key))];
 }
 
 interface PickerProps {
-  plant: PlantItem;
+  /** The plant being fed, or every plant in a lot. */
+  plants: PlantItem[];
   choices: string[];
   ready: Set<string>;
   given: string[];
@@ -114,8 +118,10 @@ interface PickerProps {
 }
 
 /** Tick which natural inputs were given, with how much of each goes in a litre of water. */
-export function InputPicker({ plant, choices, ready, given, onChange }: PickerProps) {
-  const recommended = new Set(recommendedInputs(plant, ready).map((r) => r.key));
+export function InputPicker({ plants, choices, ready, given, onChange }: PickerProps) {
+  /** How many of the plants each input suits. */
+  const suits = new Map<string, number>();
+  for (const p of plants) for (const r of recommendedInputs(p, ready)) suits.set(r.key, (suits.get(r.key) ?? 0) + 1);
   const toggle = (key: string) =>
     onChange(choices.filter((k) => (k === key ? !given.includes(k) : given.includes(k))));
 
@@ -126,7 +132,13 @@ export function InputPicker({ plant, choices, ready, given, onChange }: PickerPr
         const recipe = findRecipe(key);
         const notes = [
           recipe ? doseText(recipe) : null,
-          recommended.has(key) ? 'Suits this stage' : null,
+          !suits.has(key)
+            ? null
+            : plants.length === 1
+              ? 'Suits this stage'
+              : suits.get(key) === plants.length
+                ? 'Suits all of them'
+                : `Suits ${suits.get(key)} of ${plants.length}`,
           ready.has(key) ? 'Batch ready' : null,
         ].filter(Boolean);
         return (

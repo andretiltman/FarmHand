@@ -9,20 +9,40 @@ import { AddItemModal } from './src/components/AddItemModal';
 import { HomeAssistantModal } from './src/components/HomeAssistantModal';
 import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
+import { LotFeedModal } from './src/components/LotFeedModal';
 import { SeedsModal } from './src/components/SeedsModal';
 import { TransferModal } from './src/components/TransferModal';
+import { groupByLot, lotEmoji, lotKey, lotNames, plantsInLot } from './src/lots';
 import { readyInputs } from './src/natural';
 import { overviewGroups, SectionKey, sections } from './src/sections';
+import { plantSummary } from './src/stats';
 import { colors, radius } from './src/theme';
 import { CareKind, TrackedItem } from './src/types';
 import { useHomeAssistant } from './src/useHomeAssistant';
 import { useItems } from './src/useItems';
 import { useSeeds } from './src/useSeeds';
 
-/** A row on the list: an item, or (on the overview) a group heading with how many need doing. */
+/**
+ * A row on the list: an item, (on the overview) a group heading with how many need doing, or a lot heading over
+ * the plants in it, with buttons to water or feed the whole lot.
+ */
 type Row =
   | { type: 'item'; item: TrackedItem }
-  | { type: 'group'; key: SectionKey; emoji: string; label: string; count: number; open: boolean };
+  | { type: 'group'; key: SectionKey; emoji: string; label: string; count: number; open: boolean }
+  | { type: 'lot'; key: string; lot: string | null; count: number };
+
+/** Item rows, under a heading per lot when any of the plants are in one. `key` keeps headings unique per group. */
+function itemRows(list: TrackedItem[], key: string): Row[] {
+  const byLot = groupByLot(list);
+  if (!byLot) return list.map((item) => ({ type: 'item', item }));
+  return [
+    ...byLot.groups.flatMap((g): Row[] => [
+      { type: 'lot', key: `lot-${key}-${g.lot ? lotKey(g.lot) : ''}`, lot: g.lot, count: g.items.length },
+      ...g.items.map((item): Row => ({ type: 'item', item })),
+    ]),
+    ...byLot.others.map((item): Row => ({ type: 'item', item })),
+  ];
+}
 
 export default function App() {
   return (
@@ -50,6 +70,7 @@ function HomeScreen() {
     setTags,
     setWaterEvery,
     waterPlant,
+    waterPlants,
     logEggs,
     logCare,
     setCare,
@@ -60,6 +81,9 @@ function HomeScreen() {
     setTaskEvery,
     setTaskSchedule,
     giveInputs,
+    giveInputsTo,
+    setLot,
+    transplant,
     setFlowered,
     advanceBatch,
     setUsedUp,
@@ -83,6 +107,8 @@ function HomeScreen() {
   const [startCare, setStartCare] = useState<CareKind | null>(null);
   /** Set when a plant card's Feed button opens the details popup to pick which natural inputs were given. */
   const [startFeed, setStartFeed] = useState(false);
+  /** Set when a lot heading's Feed button opens the popup to pick what was given to the whole lot. */
+  const [feedingLot, setFeedingLot] = useState<string | null>(null);
   const [sectionKey, setSectionKey] = useState<SectionKey>('overview');
   /** Overview groups that are opened up to show their items (they start closed, showing just a count). */
   const [openGroups, setOpenGroups] = useState<SectionKey[]>([]);
@@ -90,6 +116,7 @@ function HomeScreen() {
 
   /** Natural inputs with a batch ready to use – plants are only reminded about these. */
   const ready = useMemo(() => readyInputs(items), [items]);
+  const lots = useMemo(() => lotNames(items), [items]);
   const bySection = useMemo(() => {
     const now = new Date();
     return Object.fromEntries(sections.map((s) => [s.key, items.filter((i) => s.includes(i, now, ready))])) as Record<
@@ -126,14 +153,14 @@ function HomeScreen() {
 
   // The overview lists a row per group – e.g. "🌰 Seeds 3" – that opens up to show what needs doing.
   const rows: Row[] = useMemo(() => {
-    if (sectionKey !== 'overview') return visible.map((item) => ({ type: 'item', item }));
+    if (sectionKey !== 'overview') return itemRows(visible, sectionKey);
     const now = new Date();
     return overviewGroups.flatMap((g): Row[] => {
       const groupItems = visible.filter((i) => g.includes(i, now, ready));
       if (!groupItems.length) return [];
       const open = openGroups.includes(g.key);
       const header: Row = { type: 'group', key: g.key, emoji: g.emoji, label: g.label, count: groupItems.length, open };
-      return open ? [header, ...groupItems.map((item): Row => ({ type: 'item', item }))] : [header];
+      return open ? [header, ...itemRows(groupItems, g.key)] : [header];
     });
   }, [sectionKey, visible, openGroups, ready]);
   const toggleGroup = (key: SectionKey) =>
@@ -225,7 +252,7 @@ function HomeScreen() {
       ) : (
         <FlatList
           data={rows}
-          keyExtractor={(r) => (r.type === 'group' ? `group-${r.key}` : r.item.id)}
+          keyExtractor={(r) => (r.type === 'group' ? `group-${r.key}` : r.type === 'lot' ? r.key : r.item.id)}
           contentContainerStyle={[styles.list, rows.length === 0 && styles.flex]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item: row }) => {
@@ -245,6 +272,55 @@ function HomeScreen() {
                   </View>
                   <Text style={styles.groupChevron}>{row.open ? '▾' : '▸'}</Text>
                 </Pressable>
+              );
+            }
+            if (row.type === 'lot') {
+              if (!row.lot) {
+                return (
+                  <View style={styles.lot}>
+                    <Text style={styles.lotName}>Not in a lot</Text>
+                  </View>
+                );
+              }
+              const lot = row.lot;
+              // The buttons look after the whole lot – also its plants that aren't in this section.
+              const inLot = plantsInLot(items, lot);
+              const due = inLot.filter((p) => plantSummary(p).status !== 'ok').length;
+              const plants = `${inLot.length} plant${inLot.length === 1 ? '' : 's'}`;
+              return (
+                <View style={styles.lot}>
+                  <View style={styles.flexShrink}>
+                    <Text style={styles.lotName} numberOfLines={1}>
+                      {lotEmoji(lot)} {lot}
+                    </Text>
+                    <Text style={[styles.lotSub, due > 0 && { color: colors.warning }]} numberOfLines={1}>
+                      {inLot.length ? plants : 'Nothing growing'}
+                      {due > 0 ? ` · 💧 ${due} due` : ''}
+                    </Text>
+                  </View>
+                  {inLot.length > 0 && (
+                  <>
+                  <Pressable
+                    onPress={() => waterPlants(inLot.map((p) => p.id))}
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.lotAction, { backgroundColor: colors.waterSoft }, pressed && { opacity: 0.7 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Log watering for all ${plants} in ${lot}`}
+                  >
+                    <Text style={[styles.lotActionText, { color: colors.water }]}>💧 Water lot</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setFeedingLot(lot)}
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.lotAction, { backgroundColor: colors.inputSoft }, pressed && { opacity: 0.7 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Give natural inputs to all ${plants} in ${lot}`}
+                  >
+                    <Text style={[styles.lotActionText, { color: colors.input }]}>🧪 Feed lot</Text>
+                  </Pressable>
+                  </>
+                  )}
+                </View>
               );
             }
             const { item } = row;
@@ -352,8 +428,17 @@ function HomeScreen() {
           setTransferring(true);
         }}
       />
+      <LotFeedModal
+        lot={feedingLot}
+        plants={feedingLot ? plantsInLot(items, feedingLot) : []}
+        batches={items.filter((i) => i.kind === 'input')}
+        ready={ready}
+        onGive={giveInputsTo}
+        onClose={() => setFeedingLot(null)}
+      />
       <AddItemModal
         visible={adding}
+        lots={lots}
         onClose={() => setAdding(false)}
         onSave={addItem}
         seeds={seeds.packets}
@@ -388,6 +473,9 @@ function HomeScreen() {
         onSetTaskEvery={setTaskEvery}
         onSetTaskSchedule={setTaskSchedule}
         onAdvance={advanceStage}
+        onTransplant={transplant}
+        lots={lots}
+        onSetLot={setLot}
         onUpdateGrowth={updateGrowth}
         onAddPhoto={addPhoto}
         onSetPhotoDate={setPhotoDate}
@@ -474,6 +562,18 @@ const styles = StyleSheet.create({
   },
   groupEmoji: { fontSize: 22, marginRight: 10 },
   groupLabel: { flex: 1, fontSize: 17, fontWeight: '700', color: colors.text },
+  lot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  flexShrink: { flex: 1, minWidth: 0 },
+  lotName: { fontSize: 15, fontWeight: '800', color: colors.text },
+  lotSub: { fontSize: 12, fontWeight: '600', color: colors.muted, marginTop: 1 },
+  lotAction: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.sm },
+  lotActionText: { fontSize: 13, fontWeight: '700' },
   groupChevron: { fontSize: 16, color: colors.muted, marginLeft: 12, width: 14, textAlign: 'center' },
   separator: { height: 10 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },

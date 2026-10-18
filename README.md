@@ -29,6 +29,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - 🧪 **Something else** – your own input (e.g. OHN or fish amino acid), with however long it takes to be ready.
 
   Each batch shows the recipe as a checklist with how to do each step, *Time to add milk* / *Strain in 4 days* on its card (orange when a step is due, with a ✓ **Done** button), and once it's ready, how to use it (e.g. *1 ml per litre (1:1000)*). Already have a jar made? Pick *Already made – ready to use*. Mark a batch **used up** when it's finished. Timings are typical; ferments go faster in warm weather, so do each step when it's ready rather than strictly on the date.
+- **Lots and the greenhouse** – give each plant the lot (bed, field, tunnel, …) it grows in, e.g. *North field*, when adding it or later in its details – pick one you already use or type a new one. Crops started in a seed tray are in the 🏡 **Greenhouse** until they're transplanted; **Mark as transplanted** asks which lot they're going to. Lists of plants are grouped by lot (greenhouse first, then A–Z, then plants not in a lot), and each lot's heading shows how many plants are in it and how many are due water, with 💧 **Water lot** (logs a watering for every plant growing in the lot, harvested crops aside) and 🧪 **Feed lot** (tick the natural inputs you gave the whole lot; each plant gets the feed in its history). Each plant keeps its own 💧 **Water** and 🧪 **Feed** buttons for when you look after just that one. A plant's lot is synced between phones and sent to Home Assistant as a `lot` attribute.
 - **Feeding plants the right input at the right stage** – each crop's details show where it is in the KNF growth cycle and the inputs that suit it, with the dilution and when each was last given:
   - 🌿 **Vegetative growth** (seedlings and leafy growth): LAB, FPJ.
   - 🔄 **Changeover** (the ~10 days before flowering): LAB, WCAP, WCA.
@@ -126,8 +127,11 @@ src/stats.ts, src/dates.ts      Watering/task-due and egg-count calculations
 src/schedule.ts                 Maintenance tasks on set days of the week (e.g. Saturday 8:00 AM)
 src/natural.ts                  Natural farming inputs (KNF and JADAM): recipes, batch steps, growth stages and what to feed when
 src/care.ts                     Animal care jobs (feed / walk / groom / ride / clean) and animal types
+src/lots.ts                     Lots and the greenhouse: which lot a plant is in, grouping the list by lot
 src/sections.ts                 Home screen sections (Overview / Seeds / Seedlings / Harvest / Plants / Inputs / Animals / Maintenance)
 src/components/AddItemModal.tsx Guided add popup (plant, animal, maintenance task or natural input)
+src/components/LotPicker.tsx    Pick the lot a plant grows in (or type a new one)
+src/components/LotFeedModal.tsx Give natural inputs to a whole lot at once
 src/components/NaturalInputs.tsx  A plant's natural inputs, ticking what was given, and a batch's recipe steps
 src/components/ScheduleEditor.tsx  How a maintenance task repeats (every N days, or set days and time)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
