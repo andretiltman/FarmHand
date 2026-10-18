@@ -11,6 +11,7 @@ import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
 import { SeedsModal } from './src/components/SeedsModal';
 import { TransferModal } from './src/components/TransferModal';
+import { readyInputs } from './src/natural';
 import { overviewGroups, SectionKey, sections } from './src/sections';
 import { colors, radius } from './src/theme';
 import { CareKind, TrackedItem } from './src/types';
@@ -58,6 +59,10 @@ function HomeScreen() {
     completeTask,
     setTaskEvery,
     setTaskSchedule,
+    giveInputs,
+    setFlowered,
+    advanceBatch,
+    setUsedUp,
     advanceStage,
     updateGrowth,
     addPhoto,
@@ -76,18 +81,22 @@ function HomeScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Set when a card's care button opens the details popup to pick which named animals it was for. */
   const [startCare, setStartCare] = useState<CareKind | null>(null);
+  /** Set when a plant card's Feed button opens the details popup to pick which natural inputs were given. */
+  const [startFeed, setStartFeed] = useState(false);
   const [sectionKey, setSectionKey] = useState<SectionKey>('overview');
   /** Overview groups that are opened up to show their items (they start closed, showing just a count). */
   const [openGroups, setOpenGroups] = useState<SectionKey[]>([]);
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
+  /** Natural inputs with a batch ready to use – plants are only reminded about these. */
+  const ready = useMemo(() => readyInputs(items), [items]);
   const bySection = useMemo(() => {
     const now = new Date();
-    return Object.fromEntries(sections.map((s) => [s.key, items.filter((i) => s.includes(i, now))])) as Record<
+    return Object.fromEntries(sections.map((s) => [s.key, items.filter((i) => s.includes(i, now, ready))])) as Record<
       SectionKey,
       typeof items
     >;
-  }, [items]);
+  }, [items, ready]);
   const section = sections.find((s) => s.key === sectionKey)!;
 
   // Swipe left/right on the list to move to the next/previous section.
@@ -120,19 +129,20 @@ function HomeScreen() {
     if (sectionKey !== 'overview') return visible.map((item) => ({ type: 'item', item }));
     const now = new Date();
     return overviewGroups.flatMap((g): Row[] => {
-      const groupItems = visible.filter((i) => g.includes(i, now));
+      const groupItems = visible.filter((i) => g.includes(i, now, ready));
       if (!groupItems.length) return [];
       const open = openGroups.includes(g.key);
       const header: Row = { type: 'group', key: g.key, emoji: g.emoji, label: g.label, count: groupItems.length, open };
       return open ? [header, ...groupItems.map((item): Row => ({ type: 'item', item }))] : [header];
     });
-  }, [sectionKey, visible, openGroups]);
+  }, [sectionKey, visible, openGroups, ready]);
   const toggleGroup = (key: SectionKey) =>
     setOpenGroups((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   const plantCount = items.filter((i) => i.kind === 'plant').length;
   const animalCount = items.filter((i) => i.kind === 'animal').length;
   const taskCount = items.filter((i) => i.kind === 'task').length;
+  const batchCount = items.filter((i) => i.kind === 'input').length;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -142,6 +152,7 @@ function HomeScreen() {
           <Text style={styles.subtitle}>
             {plantCount} plant{plantCount === 1 ? '' : 's'} · {animalCount} animal{animalCount === 1 ? '' : 's'}
             {taskCount > 0 ? ` · ${taskCount} task${taskCount === 1 ? '' : 's'}` : ''}
+            {batchCount > 0 ? ` · ${batchCount} batch${batchCount === 1 ? '' : 'es'}` : ''}
           </Text>
         </View>
         <Pressable
@@ -240,13 +251,22 @@ function HomeScreen() {
             return (
               <ItemCard
                 item={item}
+                ready={ready}
                 onPress={() => {
                   setStartCare(null);
+                  setStartFeed(false);
                   setSelectedId(item.id);
                 }}
                 onWater={() => waterPlant(item.id)}
+                onFeed={() => {
+                  setStartCare(null);
+                  setStartFeed(true);
+                  setSelectedId(item.id);
+                }}
+                onStep={() => advanceBatch(item.id)}
                 onCare={(kind) => {
                   if (item.kind === 'animal' && asksWho(item, kind)) {
+                    setStartFeed(false);
                     setStartCare(kind);
                     setSelectedId(item.id);
                   } else logCare(item.id, kind);
@@ -280,7 +300,7 @@ function HomeScreen() {
           onPress={() => setAdding(true)}
           style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.8 }]}
           accessibilityRole="button"
-          accessibilityLabel="Add a plant, animal, maintenance task or seeds"
+          accessibilityLabel="Add a plant, animal, maintenance task, natural input or seeds"
         >
           <Text style={styles.addText}>＋ Add</Text>
         </Pressable>
@@ -348,8 +368,16 @@ function HomeScreen() {
         onClose={() => {
           setSelectedId(null);
           setStartCare(null);
+          setStartFeed(false);
         }}
         startCare={startCare}
+        startFeed={startFeed}
+        batches={items.filter((i) => i.kind === 'input')}
+        ready={ready}
+        onGiveInputs={giveInputs}
+        onSetFlowered={setFlowered}
+        onAdvanceBatch={advanceBatch}
+        onSetUsedUp={setUsedUp}
         onSetNames={setNames}
         onWater={waterPlant}
         onLogEggs={logEggs}

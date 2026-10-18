@@ -1,6 +1,7 @@
 import { CARE, careEvery, careStatuses } from './care';
 import { findCrop } from './crops';
 import { growthStatus, transplantSuccess } from './growth';
+import { batchStatus, batchSteps, doseText, feedStage, inputLabel, inputsDue, readyInputs } from './natural';
 import { describeSchedule, validSchedule, WEEKDAYS } from './schedule';
 import { animalSummary, plantSummary, taskSummary } from './stats';
 import { checkSnapshot, isSnapshot, SyncSnapshot } from './sync';
@@ -50,19 +51,24 @@ export function entityIds(items: TrackedItem[]): Map<string, string> {
   return ids;
 }
 
-/** The sensors FarmHand shows in Home Assistant: one per item, plus two totals handy for automations. */
+/** The sensors FarmHand shows in Home Assistant: one per item, plus totals handy for automations. */
 export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASensor[] {
   const ids = entityIds(items);
   const sensors: HASensor[] = [];
   let plantsToWater = 0;
   let eggsToday = 0;
   let tasksDue = 0;
+  let plantsToFeed = 0;
+  const ready = readyInputs(items, now);
 
   for (const item of items) {
     const entityId = ids.get(item.id)!;
     if (item.kind === 'plant') {
       const water = plantSummary(item, now);
       if (water.status !== 'ok') plantsToWater++;
+      const feed = inputsDue(item, ready, now);
+      if (feed.length) plantsToFeed++;
+      const lastInput = item.inputs[0];
       const base = {
         friendly_name: item.name,
         icon: 'mdi:sprout',
@@ -73,6 +79,10 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
         water_every_days: item.waterEveryDays,
         tags: item.tags.join(', '),
         last_watered: item.waterings[0] ?? null,
+        knf_stage: feedStage(item, now)?.stage ?? null,
+        inputs_due: feed.map((f) => f.recipe.short).join(', '),
+        last_inputs: lastInput ? lastInput.given.map(inputLabel).join(', ') : null,
+        last_inputs_given: lastInput?.date ?? null,
       };
       if (item.growth) {
         const g = growthStatus(item.growth, now);
@@ -117,6 +127,29 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
           schedule_days: schedule ? schedule.days.map((d) => WEEKDAYS[d]).join(', ') : null,
           schedule_time: schedule?.time ?? null,
           last_done: item.done[0] ?? null,
+        },
+      });
+    } else if (item.kind === 'input') {
+      const b = batchStatus(item, now);
+      const steps = batchSteps(item);
+      sensors.push({
+        entityId,
+        state: b.state === 'usedUp' ? 'used_up' : b.state,
+        attributes: {
+          friendly_name: item.name,
+          icon: 'mdi:flask',
+          kind: 'input',
+          input: b.recipe.short,
+          headline: b.headline,
+          needs_action: b.needsAction,
+          step: Math.min(item.stepsDone.length + 1, steps.length),
+          steps: steps.length,
+          next_step: b.next?.title ?? null,
+          next_step_date: b.dueAt ? b.dueAt.toISOString() : null,
+          started: item.stepsDone[0],
+          ready: steps[steps.length - 1].done ? item.stepsDone[steps.length - 1] : null,
+          dilution: b.recipe.dilution ? `1:${b.recipe.dilution}` : null,
+          dose: doseText(b.recipe),
         },
       });
     } else {
@@ -171,6 +204,16 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
       attributes: {
         friendly_name: 'FarmHand plants to water',
         icon: 'mdi:watering-can',
+        unit_of_measurement: 'plants',
+        state_class: 'measurement',
+      },
+    },
+    {
+      entityId: 'sensor.farmhand_plants_to_feed',
+      state: plantsToFeed,
+      attributes: {
+        friendly_name: 'FarmHand plants due natural inputs',
+        icon: 'mdi:flask',
         unit_of_measurement: 'plants',
         state_class: 'measurement',
       },

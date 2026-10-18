@@ -13,6 +13,7 @@ import {
   CareLog,
   Growth,
   hasPhotos,
+  InputItem,
   NewItem,
   PhotoItem,
   PlantItem,
@@ -50,9 +51,17 @@ function migrate(item: TrackedItem): TrackedItem {
         photos: item.photos ?? [],
       };
     case 'plant':
-      return { ...item, waterings: item.waterings ?? [], photos: item.photos ?? [], tags: item.tags ?? [] };
+      return {
+        ...item,
+        waterings: item.waterings ?? [],
+        photos: item.photos ?? [],
+        tags: item.tags ?? [],
+        inputs: item.inputs ?? [],
+      };
     case 'task':
       return { ...item, done: item.done ?? [] };
+    case 'input':
+      return { ...item, waits: item.waits ?? [], stepsDone: item.stepsDone?.length ? item.stepsDone : [item.createdAt] };
   }
 }
 
@@ -62,18 +71,22 @@ const STAGE_FIELD: Record<StageAction, 'sproutedAt' | 'transplantedAt' | 'harves
   harvested: 'harvestedAt',
 };
 
-/** Removes the newest watering or stage change from a plant. */
+/** Removes the newest watering, feed of natural inputs or stage change from a plant. */
 function undoPlant(plant: PlantItem): PlantItem {
-  let newest: { date: string; field: keyof Growth | 'water' } | null = plant.waterings[0]
+  let newest: { date: string; field: keyof Growth | 'water' | 'inputs' } | null = plant.waterings[0]
     ? { date: plant.waterings[0], field: 'water' }
     : null;
-  for (const field of Object.values(STAGE_FIELD)) {
+  if (plant.inputs[0] && (!newest || plant.inputs[0].date > newest.date)) newest = { date: plant.inputs[0].date, field: 'inputs' };
+  for (const field of [...Object.values(STAGE_FIELD), 'floweredAt'] as const) {
     const date = plant.growth?.[field];
     if (date && (!newest || date > newest.date)) newest = { date, field };
   }
   if (!newest) return plant;
   if (newest.field === 'water') {
     return markRemoved({ ...plant, waterings: plant.waterings.slice(1) }, removedKey.log('waterings', newest.date));
+  }
+  if (newest.field === 'inputs') {
+    return markRemoved({ ...plant, inputs: plant.inputs.slice(1) }, removedKey.log('inputs', newest.date));
   }
   const growth = { ...plant.growth!, [newest.field]: undefined };
   if (newest.field === 'transplantedAt') growth.transplantedCount = undefined;
@@ -99,6 +112,13 @@ function undoAnimal(animal: AnimalItem): AnimalItem {
 function undoTask(task: TaskItem): TaskItem {
   if (!task.done[0]) return task;
   return markRemoved({ ...task, done: task.done.slice(1) }, removedKey.log('done', task.done[0]));
+}
+
+/** Takes back "used up", or the newest step done on a batch (never the start). */
+function undoBatch(batch: InputItem): InputItem {
+  if (batch.usedUpAt) return stamp({ ...batch, usedUpAt: undefined }, 'usedUpAt');
+  if (batch.stepsDone.length <= 1) return batch;
+  return stamp({ ...batch, stepsDone: batch.stepsDone.slice(0, -1) }, 'stepsDone');
 }
 
 function deletePhotoFiles(before: TrackedItem[], after: TrackedItem[]) {
@@ -173,7 +193,7 @@ export function useItems() {
     const base = { id: newId(), createdAt: new Date().toISOString() };
     const item: TrackedItem =
       input.kind === 'plant'
-        ? { ...input, ...base, waterings: [], photos: [] }
+        ? { ...input, ...base, waterings: [], photos: [], inputs: [] }
         : input.kind === 'animal'
           ? { ...input, ...base, eggs: [], feedings: [], walks: [], groomings: [], rides: [], cleanings: [], photos: [] }
           : { ...input, ...base };
@@ -327,6 +347,45 @@ export function useItems() {
     [updatePlant],
   );
 
+  /** Logs natural inputs (recipe ids, or "other:<name>") given to a plant now. */
+  const giveInputs = useCallback(
+    (id: string, given: string[]) => {
+      if (!given.length) return;
+      const log = { date: new Date().toISOString(), given };
+      updatePlant(id, (p) => ({ ...p, inputs: [log, ...p.inputs] }));
+    },
+    [updatePlant],
+  );
+
+  /** Records that a crop has started flowering (now), or clears it. */
+  const setFlowered = useCallback(
+    (id: string, flowered: boolean) =>
+      updatePlant(id, (p) =>
+        p.growth
+          ? stamp({ ...p, growth: { ...p.growth, floweredAt: flowered ? new Date().toISOString() : undefined } }, 'growth')
+          : p,
+      ),
+    [updatePlant],
+  );
+
+  const updateBatch = useCallback(
+    (id: string, change: (batch: InputItem) => InputItem) => update(id, (i) => (i.kind === 'input' ? change(i) : i)),
+    [update],
+  );
+
+  /** Marks the next step of a batch (add milk, strain, …) as done now. */
+  const advanceBatch = useCallback(
+    (id: string) =>
+      updateBatch(id, (b) => stamp({ ...b, stepsDone: [...b.stepsDone, new Date().toISOString()] }, 'stepsDone')),
+    [updateBatch],
+  );
+
+  const setUsedUp = useCallback(
+    (id: string, usedUp: boolean) =>
+      updateBatch(id, (b) => stamp({ ...b, usedUpAt: usedUp ? new Date().toISOString() : undefined }, 'usedUpAt')),
+    [updateBatch],
+  );
+
   const completeTask = useCallback(
     (id: string) => {
       const now = new Date().toISOString();
@@ -412,7 +471,9 @@ export function useItems() {
   /** Removes the most recent history entry (undo a mis-tap). */
   const undoLast = useCallback(
     (id: string) =>
-      update(id, (i) => (i.kind === 'plant' ? undoPlant(i) : i.kind === 'task' ? undoTask(i) : undoAnimal(i))),
+      update(id, (i) =>
+        i.kind === 'plant' ? undoPlant(i) : i.kind === 'task' ? undoTask(i) : i.kind === 'input' ? undoBatch(i) : undoAnimal(i),
+      ),
     [update],
   );
 
@@ -440,6 +501,10 @@ export function useItems() {
     completeTask,
     setTaskEvery,
     setTaskSchedule,
+    giveInputs,
+    setFlowered,
+    advanceBatch,
+    setUsedUp,
     advanceStage,
     updateGrowth,
     addPhoto,
