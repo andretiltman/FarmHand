@@ -1,5 +1,6 @@
 import { careStatuses } from './care';
 import { growthStatus } from './growth';
+import { batchStatus, inputsDue } from './natural';
 import { plantSummary, taskSummary } from './stats';
 import { TrackedItem } from './types';
 
@@ -10,6 +11,7 @@ export type SectionKey =
   | 'seedlings'
   | 'harvest'
   | 'plants'
+  | 'inputs'
   | 'animals'
   | 'maintenance';
 
@@ -20,16 +22,22 @@ export interface Section {
   /** Shown when the section has nothing in it. */
   emptyTitle: string;
   emptyText: string;
-  includes: (item: TrackedItem, now: Date) => boolean;
+  /** `ready`: the natural inputs there's a batch of ready to use (see natural.ts). */
+  includes: (item: TrackedItem, now: Date, ready: Set<string>) => boolean;
 }
 
-/** True when a plant needs watering, transplanting or harvesting, an animal is due a feed, walk, … or a task is due. */
-export function needsAttention(item: TrackedItem, now: Date = new Date()): boolean {
+/**
+ * True when a plant needs watering, transplanting, harvesting or natural inputs, an animal is due a feed, walk, …,
+ * a task is due, or a batch of natural inputs is ready for its next step.
+ */
+export function needsAttention(item: TrackedItem, now: Date = new Date(), ready: Set<string> = new Set()): boolean {
   if (item.kind === 'animal') return careStatuses(item, now).some((c) => c.status !== 'ok');
   if (item.kind === 'task') return taskSummary(item, now).status !== 'ok';
+  if (item.kind === 'input') return batchStatus(item, now).needsAction;
   const g = item.growth ? growthStatus(item.growth, now) : null;
   if (g?.stage === 'harvested') return false;
   if (g?.needsAction) return true;
+  if (inputsDue(item, ready, now).length) return true;
   return plantSummary(item, now).status !== 'ok';
 }
 
@@ -43,7 +51,8 @@ export const sections: Section[] = [
     label: 'Overview',
     emoji: '⭐',
     emptyTitle: 'All caught up',
-    emptyText: 'Nothing needs watering, transplanting, harvesting, feeding, walking, grooming, cleaning out or maintenance right now.',
+    emptyText:
+      'Nothing needs watering, natural inputs, transplanting, harvesting, feeding, walking, grooming, cleaning out or maintenance right now.',
     includes: needsAttention,
   },
   {
@@ -88,6 +97,14 @@ export const sections: Section[] = [
     emptyTitle: 'No plants yet',
     emptyText: 'Houseplants, trees and other plants you water show up here (crops grown from seed are under Harvest).',
     includes: (item) => item.kind === 'plant' && !item.growth,
+  },
+  {
+    key: 'inputs',
+    label: 'Inputs',
+    emoji: '🧪',
+    emptyTitle: 'No natural inputs',
+    emptyText: 'Tap “Add” below to start a batch of LAB, calcium vinegar (WCA) or another natural farming input.',
+    includes: (item) => item.kind === 'input',
   },
   {
     key: 'animals',

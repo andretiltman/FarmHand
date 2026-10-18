@@ -1,4 +1,4 @@
-export type ItemKind = 'plant' | 'animal' | 'task';
+export type ItemKind = 'plant' | 'animal' | 'task' | 'input';
 
 /** Sow straight into the ground, or start in a seed tray and transplant later. */
 export type SowMethod = 'direct' | 'transplant';
@@ -22,6 +22,8 @@ export interface Growth {
   transplantedAt?: string;
   /** How many seedlings made it to transplanting (out of `seedsSown`). */
   transplantedCount?: number;
+  /** When the first flowers (or buds) showed – the switch from leafy growth to fruiting (see natural.ts). */
+  floweredAt?: string;
   harvestedAt?: string;
 }
 
@@ -56,7 +58,17 @@ export interface PlantItem extends Syncable {
   photos: PlantPhoto[];
   /** e.g. "GMO-free", "Bush", "Runner". */
   tags: string[];
+  /** Natural inputs (LAB, WCA, …) given, newest first. */
+  inputs: InputLog[];
   createdAt: string;
+}
+
+/** One feed of natural inputs, often several mixed into the same watering can. */
+export interface InputLog {
+  /** ISO timestamp. */
+  date: string;
+  /** What was given: recipe ids from natural.ts (e.g. "lab", "wca"), or "other:<name>" for your own inputs. */
+  given: string[];
 }
 
 /** A packet (or jar) of seeds on hand, not yet sown. Kept on this phone only (not synced). */
@@ -140,14 +152,31 @@ export interface TaskItem extends Syncable {
   createdAt: string;
 }
 
-export type TrackedItem = PlantItem | AnimalItem | TaskItem;
+/** A batch of a Korean Natural Farming input being made, e.g. a jar of LAB or of eggshells in vinegar (WCA). */
+export interface InputItem extends Syncable {
+  id: string;
+  kind: 'input';
+  name: string;
+  /** Recipe id from natural.ts, or "other" for your own. */
+  recipeId: string;
+  /** Days to wait before each step after the first, copied from the recipe when started (or set for "other"). */
+  waits: number[];
+  /** When each step was done, in order – the first is when the batch was started. */
+  stepsDone: string[];
+  /** Set once the batch is finished, so it no longer counts as ready to use. */
+  usedUpAt?: string;
+  createdAt: string;
+}
+
+export type TrackedItem = PlantItem | AnimalItem | TaskItem | InputItem;
 
 /** Items that can have photos. */
 export type PhotoItem = PlantItem | AnimalItem;
 
-export const hasPhotos = (item: TrackedItem): item is PhotoItem => item.kind !== 'task';
+export const hasPhotos = (item: TrackedItem): item is PhotoItem => item.kind === 'plant' || item.kind === 'animal';
 
 export type NewItem =
-  | Omit<PlantItem, 'id' | 'waterings' | 'photos' | 'createdAt'>
+  | Omit<PlantItem, 'id' | 'waterings' | 'photos' | 'inputs' | 'createdAt'>
   | Omit<AnimalItem, 'id' | 'eggs' | 'feedings' | 'walks' | 'groomings' | 'rides' | 'cleanings' | 'photos' | 'createdAt'>
-  | Omit<TaskItem, 'id' | 'createdAt'>;
+  | Omit<TaskItem, 'id' | 'createdAt'>
+  | Omit<InputItem, 'id' | 'createdAt'>;

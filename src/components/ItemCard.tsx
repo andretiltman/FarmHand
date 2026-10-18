@@ -2,8 +2,9 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
-import { daysBetween, formatDays } from '../dates';
+import { daysBetween, formatDays, relativeDay } from '../dates';
 import { growthStatus } from '../growth';
+import { batchStatus, dilutionText, inputLabel, inputsDue } from '../natural';
 import { shortSchedule, validSchedule } from '../schedule';
 import { animalSummary, DueStatus, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
@@ -21,8 +22,14 @@ interface QuickAction {
 
 interface Props {
   item: TrackedItem;
+  /** Natural inputs there's a batch of ready to use. */
+  ready: Set<string>;
   onPress: () => void;
   onWater: () => void;
+  /** Give a plant the natural inputs it's due. */
+  onFeed: () => void;
+  /** Mark the next step of a batch of natural inputs as done. */
+  onStep: () => void;
   onCare: (kind: CareKind) => void;
   onEgg: () => void;
   onDone: () => void;
@@ -38,15 +45,19 @@ const statusColor: Record<DueStatus, string> = {
 /** Room for this many quick-action buttons on a card. */
 const MAX_ACTIONS = 2;
 
-export function ItemCard({ item, onPress, onWater, onCare, onEgg, onDone }: Props) {
-
+export function ItemCard({ item, ready, onPress, onWater, onFeed, onStep, onCare, onEgg, onDone }: Props) {
   let line1: string;
   let line2: string;
   /** Set when line 1 is a highlighted status rather than plain detail text. */
   let line1Color: string | null = null;
   let line2Color: string = colors.muted;
   let icon = item.kind === 'plant' ? '🪴' : item.kind === 'animal' ? speciesEmoji(item.species) : '🛠️';
-  const iconBackground = { plant: colors.plantSoft, animal: colors.animalSoft, task: colors.taskSoft }[item.kind];
+  const iconBackground = {
+    plant: colors.plantSoft,
+    animal: colors.animalSoft,
+    task: colors.taskSoft,
+    input: colors.inputSoft,
+  }[item.kind];
   let actions: QuickAction[];
   if (item.kind === 'plant') {
     const s = plantSummary(item);
@@ -71,6 +82,45 @@ export function ItemCard({ item, onPress, onWater, onCare, onEgg, onDone }: Prop
         onPress: onWater,
       },
     ];
+    const feed = inputsDue(item, ready);
+    if (feed.length) {
+      actions.push({
+        emoji: '🧪',
+        label: 'Feed',
+        accessibilityLabel: `Give ${feed.map((f) => f.recipe.short).join(', ')} to ${item.name}`,
+        color: colors.input,
+        soft: colors.inputSoft,
+        onPress: onFeed,
+      });
+    }
+  } else if (item.kind === 'input') {
+    const s = batchStatus(item);
+    icon = s.recipe.emoji;
+    const label = inputLabel(s.recipe.id);
+    if (s.state === 'ready') {
+      line1 = `${label} · ready ${relativeDay(item.stepsDone[item.stepsDone.length - 1])}`;
+      line2 = `✓ Ready · ${dilutionText(s.recipe.dilution)}`;
+      line2Color = colors.plant;
+    } else if (s.state === 'usedUp') {
+      line1 = `${label} · started ${relativeDay(item.stepsDone[0])}`;
+      line2 = 'Used up';
+    } else {
+      line1 = `${label} · step ${s.nextIndex + 1} of ${s.recipe.steps.length} · started ${shortAgo(item.stepsDone[0])}`;
+      line2 = s.headline;
+      line2Color = s.needsAction ? colors.warning : colors.input;
+    }
+    actions = s.needsAction
+      ? [
+          {
+            emoji: '✓',
+            label: 'Done',
+            accessibilityLabel: `Mark "${s.next!.title}" as done for ${item.name}`,
+            color: colors.input,
+            soft: colors.inputSoft,
+            onPress: onStep,
+          },
+        ]
+      : [];
   } else if (item.kind === 'task') {
     const s = taskSummary(item);
     const schedule = validSchedule(item.schedule);
@@ -138,7 +188,7 @@ export function ItemCard({ item, onPress, onWater, onCare, onEgg, onDone }: Prop
       accessibilityLabel={`${item.name}, ${line1}, ${line2}`}
     >
       <View style={[styles.icon, { backgroundColor: iconBackground }]}>
-        {item.kind !== 'task' && item.photos[0] ? (
+        {(item.kind === 'plant' || item.kind === 'animal') && item.photos[0] ? (
           <Image source={{ uri: item.photos[0].uri }} style={styles.photo} accessibilityIgnoresInvertColors />
         ) : (
           <Text style={styles.iconText}>{icon}</Text>

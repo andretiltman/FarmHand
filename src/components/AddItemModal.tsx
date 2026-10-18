@@ -5,17 +5,19 @@ import { CARE, careJob, findSpecies, joinNames, SPECIES_PRESETS, SpeciesPreset, 
 import { CROPS, Crop, findCrop } from '../crops';
 import { addDays, approxDays, formatShortDate, plural } from '../dates';
 import { growthStatus } from '../growth';
+import { batchStatus, batchSteps, findRecipe, OTHER_INPUT, OTHER_READY_DAYS, Recipe, RECIPES } from '../natural';
 import { sowingAdvice } from '../seasons';
 import { colors, radius } from '../theme';
 import { describeSchedule } from '../schedule';
 import { taskSummary } from '../stats';
-import { CareKind, Growth, ItemKind, NewItem, SeedPacket, SowMethod, TaskSchedule } from '../types';
+import { CareKind, Growth, InputItem, ItemKind, NewItem, SeedPacket, SowMethod, TaskSchedule } from '../types';
 import { seedsFor } from '../useSeeds';
 import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { NamesEditor } from './NamePicker';
+import { BatchSteps } from './NaturalInputs';
 import { ScheduleEditor } from './ScheduleEditor';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
@@ -32,8 +34,9 @@ interface Props {
   onAddSeeds: () => void;
 }
 
-type Step = 'kind' | 'crop' | 'details' | 'review';
+type Step = 'kind' | 'crop' | 'recipe' | 'details' | 'review';
 const PLANT_STEPS: Step[] = ['kind', 'crop', 'details', 'review'];
+const INPUT_STEPS: Step[] = ['kind', 'recipe', 'details', 'review'];
 const SHORT_STEPS: Step[] = ['kind', 'details', 'review'];
 
 /** Crop id for plants tracked for watering only. */
@@ -73,6 +76,13 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
   const [schedule, setSchedule] = useState<TaskSchedule | undefined>(undefined);
   /** Days since the task was last done; null when it hasn't been done yet. */
   const [lastDoneDaysAgo, setLastDoneDaysAgo] = useState<number | null>(null);
+  /** The natural input being made: a recipe id, or OTHER_INPUT for your own. */
+  const [recipeId, setRecipeId] = useState<string | null>(null);
+  const [startedDaysAgo, setStartedDaysAgo] = useState(0);
+  /** True for a batch that's already made and ready to use. */
+  const [alreadyMade, setAlreadyMade] = useState(false);
+  /** How long your own input takes to be ready. */
+  const [readyDays, setReadyDays] = useState(OTHER_READY_DAYS);
 
   // Start fresh every time the popup opens.
   useEffect(() => {
@@ -94,19 +104,25 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
       setEveryDays(30);
       setSchedule(undefined);
       setLastDoneDaysAgo(null);
+      setRecipeId(null);
+      setStartedDaysAgo(0);
+      setAlreadyMade(false);
+      setReadyDays(OTHER_READY_DAYS);
     }
   }, [visible]);
 
   const isPlant = kind === 'plant';
   const isTask = kind === 'task';
-  const accent = isPlant ? colors.plant : isTask ? colors.task : colors.animal;
+  const isInput = kind === 'input';
+  const accent = isPlant ? colors.plant : isTask ? colors.task : isInput ? colors.input : colors.animal;
+  const recipe = findRecipe(recipeId ?? undefined);
   const crop = findCrop(cropId ?? undefined);
   const trimmedName = name.trim();
   const trimmedSpecies = species.trim() || 'Chicken';
   const cropPackets = crop ? seeds.filter((p) => p.cropId === crop.id && p.count > 0) : [];
   const packet = cropPackets.find((p) => p.id === packetId);
 
-  const sequence = kind && kind !== 'plant' ? SHORT_STEPS : PLANT_STEPS;
+  const sequence = isInput ? INPUT_STEPS : kind && kind !== 'plant' ? SHORT_STEPS : PLANT_STEPS;
   const stepIndex = sequence.indexOf(step);
   const go = (delta: 1 | -1) => setStep(sequence[stepIndex + delta]);
 
@@ -123,7 +139,14 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
 
   const chooseKind = (k: ItemKind) => {
     setKind(k);
-    setStep(k === 'plant' ? 'crop' : 'details');
+    setStep(k === 'plant' ? 'crop' : k === 'input' ? 'recipe' : 'details');
+  };
+
+  const chooseRecipe = (r: Recipe | null) => {
+    // Keep a name the user typed, but swap in the new recipe's name if it was ours.
+    if (!trimmedName || trimmedName === recipe?.name) setName(r?.name ?? '');
+    setRecipeId(r?.id ?? OTHER_INPUT);
+    setStep('details');
   };
 
   const chooseCrop = (c: Crop | null) => {
@@ -146,6 +169,27 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
     setTracksEggs(p.tracksEggs);
   }
 
+  // The batch as it will be saved, for the preview and the timeline.
+  const batchWaits = recipe ? recipe.waits : [readyDays];
+  const startedAt = addDays(new Date(), -startedDaysAgo);
+  const batchDone = [startedAt.toISOString()];
+  if (alreadyMade) {
+    // Fill in the later steps at their usual timing, but never in the future.
+    let at = startedAt;
+    for (const wait of batchWaits) {
+      at = addDays(at, wait);
+      batchDone.push((at > new Date() ? new Date() : at).toISOString());
+    }
+  }
+  const newBatch: Omit<InputItem, 'id' | 'createdAt'> = {
+    kind: 'input',
+    name: trimmedName,
+    recipeId: recipeId ?? OTHER_INPUT,
+    waits: batchWaits,
+    stepsDone: batchDone,
+  };
+  const previewBatch: InputItem = { ...newBatch, id: '', createdAt: batchDone[0] };
+
   const lastDoneAt = lastDoneDaysAgo === null ? null : addDays(new Date(), -lastDoneDaysAgo);
   const taskDone = lastDoneAt ? [lastDoneAt.toISOString()] : [];
 
@@ -153,7 +197,9 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
     if (!kind || !trimmedName) return;
     if (kind === 'plant' && growth && packet) onTakeSeeds(packet.id, seedsSown);
     onSave(
-      kind === 'plant'
+      kind === 'input'
+        ? newBatch
+        : kind === 'plant'
         ? { kind, name: trimmedName, waterEveryDays, growth, tags }
         : kind === 'animal'
           ? {
@@ -180,18 +226,23 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
   const titles: Record<Step, string> = {
     kind: 'What would you like to track?',
     crop: 'What are you planting?',
+    recipe: 'What are you making?',
     details: crop
       ? `Planting ${crop.name.toLowerCase()}`
       : isPlant
         ? 'Tell us about your plant'
         : isTask
           ? 'Set up a maintenance task'
-          : 'Tell us about your animals',
+          : isInput
+            ? recipe
+              ? `Making ${recipe.short}`
+              : 'Your own natural input'
+            : 'Tell us about your animals',
     review: 'Looks good?',
   };
 
   let footer = null;
-  if (step === 'crop') {
+  if (step === 'crop' || step === 'recipe') {
     footer = <Button label="Back" variant="secondary" onPress={() => go(-1)} />;
   } else if (step === 'details') {
     footer = (
@@ -204,7 +255,11 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
     footer = (
       <>
         <Button label="Back" variant="secondary" onPress={() => go(-1)} />
-        <Button label={isPlant ? 'Add plant' : isTask ? 'Add task' : 'Add animals'} color={accent} onPress={save} />
+        <Button
+          label={isPlant ? 'Add plant' : isTask ? 'Add task' : isInput ? 'Add batch' : 'Add animals'}
+          color={accent}
+          onPress={save}
+        />
       </>
     );
   }
@@ -259,6 +314,60 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
           />
         </View>
       )}
+      {step === 'kind' && (
+        <View style={styles.kindRow}>
+          <KindOption
+            emoji="🧪"
+            title="Natural input"
+            description="Make LAB, calcium vinegar (WCA) and other natural farming inputs for your plants"
+            color={colors.input}
+            soft={colors.inputSoft}
+            onPress={() => chooseKind('input')}
+          />
+        </View>
+      )}
+
+      {step === 'recipe' && (
+        <ScrollView style={styles.shrink}>
+          {RECIPES.map((r) => (
+            <Pressable
+              key={r.id}
+              onPress={() => chooseRecipe(r)}
+              style={({ pressed }) => [
+                styles.otherTile,
+                recipeId === r.id && styles.inputSelected,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`${r.name}, ${r.short}`}
+            >
+              <Text style={styles.otherEmoji}>{r.emoji}</Text>
+              <View style={styles.shrink}>
+                <Text style={styles.otherTitle}>
+                  {r.short} · {r.name}
+                </Text>
+                <Text style={styles.otherDesc}>{r.about}</Text>
+              </View>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={() => chooseRecipe(null)}
+            style={({ pressed }) => [
+              styles.otherTile,
+              recipeId === OTHER_INPUT && styles.inputSelected,
+              pressed && styles.pressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Something else"
+          >
+            <Text style={styles.otherEmoji}>🧪</Text>
+            <View style={styles.shrink}>
+              <Text style={styles.otherTitle}>Something else</Text>
+              <Text style={styles.otherDesc}>Your own input, e.g. OHN or fish amino acid (FAA)</Text>
+            </View>
+          </Pressable>
+        </ScrollView>
+      )}
 
       {step === 'crop' && (
         <ScrollView style={styles.shrink}>
@@ -305,11 +414,13 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
                 ? 'e.g. Fern by the window'
                 : isTask
                   ? 'e.g. Septic tank bio enzymes'
-                  : `e.g. ${findSpecies(species)?.example ?? 'The Girls'}`
+                  : isInput
+                    ? 'e.g. Oriental herbal nutrient (OHN)'
+                    : `e.g. ${findSpecies(species)?.example ?? 'The Girls'}`
             }
             placeholderTextColor={colors.muted}
             style={styles.input}
-            autoFocus={!crop && !isTask}
+            autoFocus={!crop && !isTask && !recipe}
             returnKeyType="next"
             onSubmitEditing={() => trimmedName && go(1)}
             maxLength={60}
@@ -465,7 +576,65 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
             </>
           )}
 
-          {isTask ? null : isPlant ? (
+          {isInput && (
+            <>
+              <Text style={styles.label}>Is it made yet?</Text>
+              <View style={styles.chips}>
+                <Chip
+                  label="Starting it now"
+                  selected={!alreadyMade}
+                  color={colors.input}
+                  onPress={() => setAlreadyMade(false)}
+                />
+                <Chip
+                  label="Already made – ready to use"
+                  selected={alreadyMade}
+                  color={colors.input}
+                  onPress={() => setAlreadyMade(true)}
+                />
+              </View>
+
+              <Text style={styles.label}>When did you start it?</Text>
+              <View style={styles.chips}>
+                <Chip label="Today" selected={startedDaysAgo === 0} color={colors.input} onPress={() => setStartedDaysAgo(0)} />
+                <Chip
+                  label="Yesterday"
+                  selected={startedDaysAgo === 1}
+                  color={colors.input}
+                  onPress={() => setStartedDaysAgo(1)}
+                />
+              </View>
+              <View style={styles.spaced}>
+                <Stepper
+                  label="Days since starting"
+                  value={startedDaysAgo}
+                  onChange={setStartedDaysAgo}
+                  min={0}
+                  max={730}
+                  suffix="days ago"
+                />
+              </View>
+
+              {!recipe && (
+                <>
+                  <Text style={styles.label}>Ready to use after</Text>
+                  <Stepper label="Days until ready" value={readyDays} onChange={setReadyDays} max={365} suffix="days" />
+                </>
+              )}
+
+              {recipe && (
+                <>
+                  <Text style={styles.label}>How to make it</Text>
+                  <Text style={styles.hint}>{recipe.about}</Text>
+                  <View style={styles.spaced}>
+                    <BatchSteps batch={previewBatch} recipe={recipe} guide />
+                  </View>
+                </>
+              )}
+            </>
+          )}
+
+          {isTask || isInput ? null : isPlant ? (
             <>
               <Text style={styles.label}>Water every</Text>
               <Stepper
@@ -543,7 +712,13 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
         <ScrollView style={styles.shrink}>
           <View style={[styles.review, { borderColor: accent }]}>
             <Text style={styles.reviewEmoji}>
-              {isPlant ? (crop?.emoji ?? '🪴') : isTask ? '🛠️' : speciesEmoji(trimmedSpecies)}
+              {isPlant
+                ? (crop?.emoji ?? '🪴')
+                : isTask
+                  ? '🛠️'
+                  : isInput
+                    ? (recipe?.emoji ?? '🧪')
+                    : speciesEmoji(trimmedSpecies)}
             </Text>
             <Text style={styles.reviewName}>{trimmedName}</Text>
             <Text style={styles.reviewDetail}>
@@ -556,7 +731,9 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
                   ]
                     .filter(Boolean)
                     .join(' · ')
-                : isTask
+                : isInput
+                  ? [recipe?.short ?? 'Natural input', `started ${formatShortDate(startedAt)}`].join(' · ')
+                  : isTask
                   ? [
                       schedule ? describeSchedule(schedule) : `every ${plural(everyDays, 'day')}`,
                       lastDoneAt ? `last done ${formatShortDate(lastDoneAt)}` : 'not done yet',
@@ -580,6 +757,22 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
                     ? `Next due ${formatShortDate(addDays(lastDoneAt, everyDays))}`
                     : 'Due now'}
               </Text>
+            )}
+            {isInput && (
+              <>
+                <Text style={[styles.reviewHeadline, { color: colors.input }]}>{batchStatus(previewBatch).headline}</Text>
+                <View style={styles.reviewSteps}>
+                  {batchSteps(previewBatch).map(({ step: s, date, done }, i) => (
+                    <Text key={i} style={styles.reviewStep}>
+                      {done ? '✓' : '○'}  {done ? s.done : s.title} · {done ? '' : '~'}
+                      {formatShortDate(date)}
+                    </Text>
+                  ))}
+                </View>
+                {!alreadyMade && (
+                  <Text style={styles.reviewNote}>Dates are estimates – mark each step done as you go.</Text>
+                )}
+              </>
             )}
             {growth && (
               <>
@@ -738,6 +931,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   tileSelected: { borderColor: colors.plant, borderWidth: 2, backgroundColor: colors.plantSoft },
+  inputSelected: { borderColor: colors.input, borderWidth: 2, backgroundColor: colors.inputSoft },
   cropEmoji: { fontSize: 28 },
   cropLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 4 },
   cropSeason: { fontSize: 11, color: colors.muted, marginTop: 2 },
@@ -820,5 +1014,7 @@ const styles = StyleSheet.create({
   reviewJourney: { alignSelf: 'stretch', marginTop: 20 },
   reviewHeadline: { fontSize: 16, fontWeight: '700', color: colors.plant, marginTop: 16, textAlign: 'center' },
   reviewSeeds: { fontSize: 14, color: colors.text, marginTop: 10, textAlign: 'center' },
+  reviewSteps: { alignSelf: 'stretch', marginTop: 12, gap: 4 },
+  reviewStep: { fontSize: 14, color: colors.text },
   reviewNote: { fontSize: 12, color: colors.muted, marginTop: 6, textAlign: 'center' },
 });

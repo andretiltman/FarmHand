@@ -1,6 +1,6 @@
 # FarmHand
 
-A simple mobile app for tracking your plants (their journey from seed to harvest, and how often you water them), your animals (feeding chickens, counting their eggs and cleaning the coop, walking and grooming the dogs, grooming, riding and mucking out the horses) and recurring maintenance jobs (like adding bio enzymes to the septic tank). Built with [Expo](https://expo.dev) / React Native, so it runs on iOS, Android and the web.
+A simple mobile app for tracking your plants (their journey from seed to harvest, how often you water them, and the natural farming inputs you give them), batches of Korean Natural Farming inputs you're making (like lactic acid bacteria and eggshell calcium), your animals (feeding chickens, counting their eggs and cleaning the coop, walking and grooming the dogs, grooming, riding and mucking out the horses) and recurring maintenance jobs (like adding bio enzymes to the septic tank). Built with [Expo](https://expo.dev) / React Native, so it runs on iOS, Android and the web.
 
 ## Features
 
@@ -9,14 +9,29 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - Plants: when they were last watered and when they're next due (turns orange when due, red when overdue).
   - Animals: what's due – *Due: 🐾 Walk, 🧼 Groom* (orange when due, red when overdue) or *All looked after* – plus eggs collected today / over the last 7 days for laying birds.
 - **Sections** – chips at the top of the list filter what you see, each with a count:
-  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, animals due a feed, walk, groom, ride or clean-out, and maintenance tasks that are due – grouped by category, e.g. *🌰 Seeds 3* or *🛠️ Maintenance 1*, showing how many need doing. Tap a group to open it up and see what needs doing. Shows *All caught up* when there's nothing to do.
+  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, plants due a natural input you have ready, seedlings ready to transplant, crops ready to harvest, batches of natural inputs ready for their next step, animals due a feed, walk, groom, ride or clean-out, and maintenance tasks that are due – grouped by category, e.g. *🌰 Seeds 3* or *🛠️ Maintenance 1*, showing how many need doing. Tap a group to open it up and see what needs doing. Shows *All caught up* when there's nothing to do.
   - 🌰 **Seeds** – seeds that have been sown but haven't sprouted yet.
   - 🌱 **Seedlings** – sprouted, waiting to be transplanted.
   - 🧺 **Harvest** – crops grown from seed, once they're past the seedling stage (growing, ready and harvested).
   - 🪴 **Plants** – houseplants, trees and other plants tracked for watering only.
+  - 🧪 **Inputs** – batches of natural farming inputs you're making or have ready.
   - 🐾 **Animals**.
   - 🛠️ **Maintenance** – recurring jobs.
 - **Maintenance tasks** – recurring jobs like *Septic tank bio enzymes* (monthly), *Clean gutters* or *Service lawnmower*. Pick a suggestion or type your own, choose how often it repeats (weekly to yearly, or any number of days) – or pick **On set days** for jobs tied to a day of the week, like *Rubbish collection* every Saturday at 8:00 AM (pick one or more days, and optionally a time). Say when it was last done so it doesn't start out overdue. Each shows when it's next due (orange when due, red when overdue). A set-day task is due on its day and shows *Missed yesterday* in red if the day passes without it being done; ticking it off the day before (putting the bins out the night before) counts for that day.
+- **Natural farming inputs (KNF)** – tap **＋ Add** → 🧪 **Natural input** to start a batch of a Korean Natural Farming input, and FarmHand walks you through making it and reminds you when each step is due:
+  - 🥛 **LAB** (lactic acid bacteria) – rice wash → add milk (~5 days) → harvest the serum (~7 days).
+  - 🥚 **WCA** (water-soluble calcium) – roasted eggshells in brown rice vinegar → strain when the bubbling stops (~10 days).
+  - 🦴 **WCAP** (water-soluble calcium phosphate) – charred bones in vinegar → strain (~14 days).
+  - 🌱 **FPJ** (fermented plant juice) and 🍌 **FFJ** (fermented fruit juice) – packed with brown sugar → strain (~7 days).
+  - 🧪 **Something else** – your own input (e.g. OHN or fish amino acid), with however long it takes to be ready.
+
+  Each batch shows the recipe as a checklist with how to do each step, *Time to add milk* / *Strain in 4 days* on its card (orange when a step is due, with a ✓ **Done** button), and once it's ready, how to use it (e.g. *1 ml per litre (1:1000)*). Already have a jar made? Pick *Already made – ready to use*. Mark a batch **used up** when it's finished. Timings are typical; ferments go faster in warm weather, so do each step when it's ready rather than strictly on the date.
+- **Feeding plants the right input at the right stage** – each crop's details show where it is in the KNF growth cycle and the inputs that suit it, with the dilution and when each was last given:
+  - 🌿 **Vegetative growth** (seedlings and leafy growth): LAB, FPJ.
+  - 🔄 **Changeover** (the ~10 days before flowering): LAB, WCAP, WCA.
+  - 🌼 **Flowering & fruiting**: LAB, WCA, FFJ.
+
+  Flowering is estimated from the crop's timeline (*Flowering in ~7 days*); tap **It has started flowering** when you see the first flowers to switch it straight away. Leafy and root crops (lettuce, carrots, onions, …) stay in vegetative growth. When a plant is due an input you have a ready batch of (weekly), it shows up on the overview with a 🧪 **Feed** button; tap it (or **Give natural inputs** in its details) and tick what you gave – it shows how much of each to mix per litre of water, and the feed is added to the plant's history. Inputs you don't have a batch of are never nagged about.
 - **Animal care** – each animal tracks the jobs it needs: 🌾 **Feed**, 🐾 **Walk**, 🧼 **Groom**, 🏇 **Ride** and 🧹 **Clean** (the coop) / **Muck out** (the stable), plus 🥚 **Eggs** for laying birds. Each job has its own colour, on the card buttons and in the details popup. Cleaning out is done for the whole group at once, so it never asks which named animals it was for. Picking a type fills in the usual ones – chickens, ducks and quail: feed daily, clean the coop weekly and collect eggs; dogs: feed and walk daily, groom weekly; horses: feed, groom and muck out daily, ride every 2 days; snakes: feed by size, from every 5 days for a hatchling to every 3 weeks for a large adult – and you can turn jobs on or off and change how often each is due, when adding the animal or later in its details.
 - **Snakes** – pick a size (*Hatchling* 5 days, *Juvenile* 7, *Sub-adult* 10, *Adult* 14, *Large adult* 21) to set how often it's fed. As it grows, pick the next size in its details (or set any number of days).
 - **Seed inventory** – tap **＋ Add** → 🌰 **Seeds** to keep track of the seeds you have on hand (not yet sown): pick the crop, name the variety (e.g. *Cherry tomato*) and how many; **🌰 My seeds** shows the packets you have. When adding a plant, each crop tile shows how many seeds you have left, you pick which packet you're sowing from, it shows how many will be left, and saving takes the sown seeds out of the inventory. Tap a packet to 📷 take or choose photos of it (like plant photos – handy for the variety and sowing notes on the back), change how many are left, remove it, or send some to someone. The inventory isn't part of syncing between phones.
@@ -40,7 +55,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
 - **Details popup** – tap any item to see its timeline, stats and full history, confirm the next growth stage, log several eggs at once, undo a mis-tap, change how often a plant needs watering or a task repeats, rename it (✏️ **Rename**), or delete it.
 - **Full screen on Android** – the system navigation bar is hidden while FarmHand is open; swipe up from the bottom edge to bring it back briefly.
 - **Send plants, animals, tasks and seeds to another phone** – tap 📤 at the top → **Send** (or **Send seeds** on a seed packet). One list shows all your plants, animals, maintenance tasks and seed packets: tick what to send, choose how many plants, animals or seeds to give where an entry holds several (for named animals, tick which ones – their care history goes with them), and whether to include photos, then tap **Send**. FarmHand makes a small file and opens your phone's share menu, so you can send it by WhatsApp, email, Bluetooth, Nearby Share or AirDrop. The other person saves the file, taps 📤 → **Receive** → **Choose file**, and the plants, animals and tasks are added with their whole history, tags and photos, and the seeds go into their 🌰 inventory (topping up a packet with the same name). Afterwards the sender can **Update my phone** (or **Remove from my phone**) to finish the move – removing what was given away and taking the seeds out of the inventory – or keep a copy if you're both looking after them.
-- **Sync two phones** – for a garden you look after together. Each phone keeps its own copy and they merge each other's changes: waterings, feedings, walks, groomings, rides, clean-outs, eggs and jobs done on either phone are all kept (so you'll both see the plants were watered), and for anything else – a rename, a new watering schedule, a growth stage – the most recent change wins. Deleting something or undoing an entry on one phone removes it on the other too. Two ways to sync:
+- **Sync two phones** – for a garden you look after together. Each phone keeps its own copy and they merge each other's changes: waterings, natural inputs given, feedings, walks, groomings, rides, clean-outs, eggs and jobs done on either phone are all kept (so you'll both see the plants were watered), and for anything else – a rename, a new watering schedule, a growth stage, a batch's next step – the most recent change wins. Batches of natural inputs are synced too (they aren't part of sending items to someone). Deleting something or undoing an entry on one phone removes it on the other too. Two ways to sync:
   - **Automatically through Home Assistant** – connect both phones to the same Home Assistant (🏠) and turn on **Sync with other phones** on both. Changes come through within a minute while FarmHand is open. Photos stay on the phone that took them.
   - **With a sync file** – 📤 → **Sync** → **Send sync file**, and the other phone opens it with 📤 → **Receive**. Do it both ways for a full sync. Handy when one of you is away from home. Choose which photos to include: **None**, the **Last 7 days** (photos added to FarmHand in the past week – keeps the file small for regular syncs) or **All** (for the first sync). Photos left out aren't removed from the other phone.
 - **Home Assistant sensors** – tap 🏠 at the top, enter your Home Assistant address and a long-lived access token, and every plant, animal and maintenance task appears in Home Assistant as a sensor (see below).
@@ -55,12 +70,14 @@ FarmHand then creates these sensors:
 
 | Entity | State | Useful attributes |
 | --- | --- | --- |
-| `sensor.farmhand_<crop name>` | growth stage: `seed`, `seedling`, `growing`, `ready`, `harvested` | `headline` (*Harvest in 12 days*), `needs_action`, `next_milestone`, `next_milestone_date`, `water_status`, `days_until_water_due`, `last_watered`, `tags` |
+| `sensor.farmhand_<crop name>` | growth stage: `seed`, `seedling`, `growing`, `ready`, `harvested` | `headline` (*Harvest in 12 days*), `needs_action`, `next_milestone`, `next_milestone_date`, `water_status`, `days_until_water_due`, `last_watered`, `tags`, `knf_stage` (`vegetative`, `changeover`, `fruiting`), `inputs_due` (e.g. `WCA, LAB`), `last_inputs`, `last_inputs_given` |
 | `sensor.farmhand_<plant name>` (watering only) | `never`, `ok`, `due`, `overdue` | `days_until_water_due`, `last_watered`, `water_every_days`, `tags` |
 | `sensor.farmhand_<animal name>` (laying birds) | eggs collected today | `eggs_last_7_days`, `eggs_total`, `needs_care`, `fed_today`, `last_fed`, `head_count`, `names`, and for each job `<job>_status`, `last_<fed/walked/groomed/ridden/cleaned>`, `<job>_every_days` |
 | `sensor.farmhand_<animal name>` (other animals) | most pressing job: `never`, `ok`, `due`, `overdue` | `needs_care` (e.g. `walk, clean`), plus the same per-job attributes |
+| `sensor.farmhand_<batch name>` (natural inputs) | `brewing`, `due` (a step is due), `ready`, `used_up` | `input` (e.g. `LAB`), `headline` (*Time to add milk*), `needs_action`, `step`, `steps`, `next_step`, `next_step_date`, `started`, `ready`, `dilution` |
 | `sensor.farmhand_<task name>` | `never`, `ok`, `due`, `overdue` | `due` (*Due in 23 days*, *Due Sat at 8:00 AM*), `days_until_due`, `every_days`, `schedule` (*every Saturday at 8:00 AM*), `schedule_days`, `schedule_time`, `last_done` |
 | `sensor.farmhand_plants_to_water` | number of plants due, overdue or never watered | |
+| `sensor.farmhand_plants_to_feed` | number of plants due a natural input you have a batch of ready | |
 | `sensor.farmhand_eggs_today` | eggs collected today across all animals | |
 | `sensor.farmhand_tasks_due` | number of maintenance tasks due, overdue or never done | |
 
@@ -103,9 +120,11 @@ src/seasons.ts                  Hemisphere-aware seasons and sowing advice
 src/growth.ts                   Seed → seedling → transplant → harvest stage logic
 src/stats.ts, src/dates.ts      Watering/task-due and egg-count calculations
 src/schedule.ts                 Maintenance tasks on set days of the week (e.g. Saturday 8:00 AM)
+src/natural.ts                  Natural farming inputs: recipes, batch steps, growth stages and what to feed when
 src/care.ts                     Animal care jobs (feed / walk / groom / ride / clean) and animal types
-src/sections.ts                 Home screen sections (Overview / Seeds / Seedlings / Harvest / Plants / Animals / Maintenance)
-src/components/AddItemModal.tsx Guided add popup (plant, animal or maintenance task)
+src/sections.ts                 Home screen sections (Overview / Seeds / Seedlings / Harvest / Plants / Inputs / Animals / Maintenance)
+src/components/AddItemModal.tsx Guided add popup (plant, animal, maintenance task or natural input)
+src/components/NaturalInputs.tsx  A plant's natural inputs, ticking what was given, and a batch's recipe steps
 src/components/ScheduleEditor.tsx  How a maintenance task repeats (every N days, or set days and time)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
 src/components/HomeAssistantModal.tsx  Connect to Home Assistant

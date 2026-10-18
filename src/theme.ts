@@ -14,6 +14,8 @@ export const colors = {
   taskSoft: '#ECE9F7',
   water: '#2F7BBF',
   waterSoft: '#E1EEF9',
+  input: '#2B7A78',
+  inputSoft: '#DDF0EE',
   muck: '#8A5A2B',
   muckSoft: '#F3E8DC',
   warning: '#C7861A',

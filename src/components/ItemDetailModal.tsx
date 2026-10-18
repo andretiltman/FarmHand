@@ -3,18 +3,20 @@ import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { asksWho, CARE, CARE_KINDS, careJob, careLogText, careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
-import { formatDateTime, relativeDay } from '../dates';
+import { formatDateTime, formatShortDate, relativeDay } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
+import { batchStatus, batchSteps, inputLabel } from '../natural';
 import { shortSchedule, validSchedule } from '../schedule';
 import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
-import { AnimalItem, CareKind, Growth, hasPhotos, TaskSchedule, TrackedItem } from '../types';
+import { AnimalItem, CareKind, Growth, hasPhotos, InputItem, TaskSchedule, TrackedItem } from '../types';
 import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
 import { MilestoneEditor } from './MilestoneEditor';
 import { NamesEditor, WhoPicker } from './NamePicker';
+import { BatchSteps, InputPicker, inputChoices, inputsToTick, PlantInputs } from './NaturalInputs';
 import { PhotoLog } from './PhotoLog';
 import { PhotoViewer } from './PhotoViewer';
 import { ScheduleEditor } from './ScheduleEditor';
@@ -31,6 +33,16 @@ interface Props {
   onCare: (id: string, kind: CareKind, who?: string[]) => void;
   /** Opens straight onto "who did you feed?" (from a card's quick button). */
   startCare?: CareKind | null;
+  /** Opens straight onto "what did you give?" (from a plant card's Feed button). */
+  startFeed?: boolean;
+  /** Batches of natural inputs, to offer your own inputs when giving them to a plant. */
+  batches: InputItem[];
+  /** Natural inputs there's a batch of ready to use. */
+  ready: Set<string>;
+  onGiveInputs: (id: string, given: string[]) => void;
+  onSetFlowered: (id: string, flowered: boolean) => void;
+  onAdvanceBatch: (id: string) => void;
+  onSetUsedUp: (id: string, usedUp: boolean) => void;
   onSetNames: (id: string, names: string[]) => void;
   onSetCare: (id: string, care: CareKind[], tracksEggs: boolean) => void;
   onSetCareEvery: (id: string, kind: CareKind, days: number) => void;
@@ -55,10 +67,11 @@ type View_ =
   | { kind: 'milestone'; key: MilestoneKey }
   | { kind: 'photo'; id: string }
   | { kind: 'rename' }
-  | { kind: 'care'; care: CareKind; who: string[]; fromCard: boolean };
+  | { kind: 'care'; care: CareKind; who: string[]; fromCard: boolean }
+  | { kind: 'feed'; given: string[]; fromCard: boolean };
 
 export function ItemDetailModal(props: Props) {
-  const { item, onClose, onWater, onLogEggs, onCare, onAdvance, onUndo, onDelete, startCare } = props;
+  const { item, onClose, onWater, onLogEggs, onCare, onAdvance, onUndo, onDelete, startCare, startFeed, ready } = props;
   const [eggCount, setEggCount] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -74,10 +87,12 @@ export function ItemDetailModal(props: Props) {
     setView(
       startCare && item?.kind === 'animal'
         ? { kind: 'care', care: startCare, who: whoToTick(item, startCare), fromCard: true }
-        : { kind: 'main' },
+        : startFeed && item?.kind === 'plant'
+          ? { kind: 'feed', given: inputsToTick(item, ready), fromCard: true }
+          : { kind: 'main' },
     );
     setTransplantCount(null);
-  }, [item?.id, startCare]);
+  }, [item?.id, startCare, startFeed]);
 
   if (!item) return null;
   const isPlant = item.kind === 'plant';
@@ -85,7 +100,8 @@ export function ItemDetailModal(props: Props) {
   let stats: { label: string; value: string }[];
   let history: { key: string; date: string; text: string; undoable: boolean }[];
   let subtitle = isPlant ? 'Plant' : item.kind === 'task' ? 'Maintenance' : '';
-  let icon = isPlant ? '🪴' : item.kind === 'task' ? '🛠️' : speciesEmoji(item.species);
+  let icon = isPlant ? '🪴' : item.kind === 'task' ? '🛠️' : item.kind === 'input' ? '🧪' : speciesEmoji(item.species);
+  const batch = item.kind === 'input' ? batchStatus(item) : undefined;
   const growth = item.kind === 'plant' ? item.growth : undefined;
   const status = growth && growthStatus(growth);
   const crop = growth && findCrop(growth.cropId);
@@ -105,6 +121,14 @@ export function ItemDetailModal(props: Props) {
       text: `💧  Watered · ${formatDateTime(d)}`,
       undoable: true,
     }));
+    history.push(
+      ...item.inputs.map((l, i) => ({
+        key: `input-${l.date}-${i}`,
+        date: l.date,
+        text: `🧪  Gave ${l.given.map(inputLabel).join(', ')} · ${formatDateTime(l.date)}`,
+        undoable: true,
+      })),
+    );
     if (growth) {
       icon = crop?.emoji ?? icon;
       subtitle = `${crop?.name ?? 'Crop'} · ${growth.method === 'direct' ? 'sown directly' : 'seed tray → transplant'}`;
@@ -116,13 +140,38 @@ export function ItemDetailModal(props: Props) {
           success ? `🪴  Transplanted ${success.transplanted} of ${success.sown}` : '🪴  Transplanted',
           true,
         ],
+        [growth.floweredAt, '🌼  Started flowering', true],
         [growth.harvestedAt, '🧺  Harvested', true],
       ];
       for (const [date, label, undoable] of events) {
         if (date) history.push({ key: label, date, text: `${label} · ${formatDateTime(date)}`, undoable });
       }
-      history.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     }
+    history.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  } else if (item.kind === 'input') {
+    const { recipe } = batch!;
+    icon = recipe.emoji;
+    subtitle = recipe.id === 'other' ? 'Natural input' : `${recipe.name} (${recipe.short})`;
+    const steps = batchSteps(item);
+    const readyStep = steps[steps.length - 1];
+    stats = [
+      { label: 'Started', value: capitalize(relativeDay(item.stepsDone[0])) },
+      { label: 'Step', value: `${Math.min(item.stepsDone.length + 1, steps.length)} of ${steps.length}` },
+      {
+        label: readyStep.done ? 'Ready' : 'Ready about',
+        value: readyStep.done ? capitalize(relativeDay(readyStep.date.toISOString())) : formatShortDate(readyStep.date),
+      },
+    ];
+    history = item.stepsDone.map((d, i) => ({
+      key: `step-${i}`,
+      date: d,
+      text: `${i === 0 ? '🧪' : '✓'}  ${recipe.steps[i]?.done ?? 'Done'} · ${formatDateTime(d)}`,
+      undoable: i > 0,
+    }));
+    if (item.usedUpAt) {
+      history.push({ key: 'used-up', date: item.usedUpAt, text: `🫙  Used up · ${formatDateTime(item.usedUpAt)}`, undoable: true });
+    }
+    history.reverse();
   } else if (item.kind === 'task') {
     const s = taskSummary(item);
     const schedule = validSchedule(item.schedule);
@@ -244,6 +293,43 @@ export function ItemDetailModal(props: Props) {
     );
   }
 
+  if (view.kind === 'feed' && item.kind === 'plant') {
+    const done = () => (view.fromCard ? onClose() : back());
+    return (
+      <Sheet
+        visible
+        onClose={onClose}
+        subtitle={subtitle}
+        title={`${icon}  ${item.name}`}
+        footer={
+          <>
+            <Button label="Cancel" variant="secondary" onPress={done} />
+            <Button
+              label="🧪  Given"
+              color={colors.input}
+              disabled={view.given.length === 0}
+              onPress={() => {
+                props.onGiveInputs(item.id, view.given);
+                done();
+              }}
+            />
+          </>
+        }
+      >
+        <ScrollView style={styles.body}>
+          <Text style={styles.sectionTitle}>What did you give?</Text>
+          <InputPicker
+            plant={item}
+            choices={inputChoices(item, props.batches, ready)}
+            ready={ready}
+            given={view.given}
+            onChange={(given) => setView({ ...view, given })}
+          />
+        </ScrollView>
+      </Sheet>
+    );
+  }
+
   if (view.kind === 'milestone' && growth) {
     return (
       <Sheet visible onClose={onClose} subtitle={subtitle} title={`${icon}  ${item.name}`}>
@@ -313,7 +399,7 @@ export function ItemDetailModal(props: Props) {
               }}
             />
             <Button
-              label={`Delete ${isPlant ? 'plant' : item.kind === 'task' ? 'task' : 'animals'}`}
+              label={`Delete ${isPlant ? 'plant' : item.kind === 'task' ? 'task' : item.kind === 'input' ? 'batch' : 'animals'}`}
               variant="danger"
               onPress={() => setConfirmDelete(true)}
             />
@@ -437,6 +523,43 @@ export function ItemDetailModal(props: Props) {
           </View>
         )}
 
+        {item.kind === 'plant' && (growth || props.batches.length > 0 || item.inputs.length > 0) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Natural inputs</Text>
+            <PlantInputs
+              plant={item}
+              ready={ready}
+              onGive={() => setView({ kind: 'feed', given: inputsToTick(item, ready), fromCard: false })}
+              onSetFlowered={(flowered) => props.onSetFlowered(item.id, flowered)}
+            />
+          </View>
+        )}
+
+        {item.kind === 'input' && batch && (
+          <View style={styles.section}>
+            {!!batch.recipe.about && <Text style={styles.about}>{batch.recipe.about}</Text>}
+            <Text
+              style={[
+                styles.growthHeadline,
+                styles.batchHeadline,
+                {
+                  color:
+                    batch.state === 'usedUp'
+                      ? colors.muted
+                      : batch.needsAction
+                        ? colors.warning
+                        : batch.state === 'ready'
+                          ? colors.plant
+                          : colors.input,
+                },
+              ]}
+            >
+              {batch.headline}
+            </Text>
+            <BatchSteps batch={item} recipe={batch.recipe} />
+          </View>
+        )}
+
         {item.kind === 'plant' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Water every</Text>
@@ -539,6 +662,20 @@ export function ItemDetailModal(props: Props) {
           <View style={styles.actionRow}>
             <Button label="✓  Done now" color={colors.task} onPress={() => props.onCompleteTask(item.id)} />
           </View>
+        ) : item.kind === 'input' ? (
+          batch?.next ? (
+            <View style={styles.actionRow}>
+              <Button
+                label={`✓  ${batch.next.title} – done`}
+                color={batch.needsAction ? colors.warning : colors.input}
+                onPress={() => props.onAdvanceBatch(item.id)}
+              />
+            </View>
+          ) : batch?.state === 'ready' ? (
+            <View style={styles.actionRow}>
+              <Button label="🫙  Mark as used up" variant="secondary" onPress={() => props.onSetUsedUp(item.id, true)} />
+            </View>
+          ) : null
         ) : (
           <>
             {item.care.length > 0 && (
@@ -588,7 +725,9 @@ export function ItemDetailModal(props: Props) {
             <Text style={styles.empty}>
               {isPlant
                 ? 'No waterings logged yet.'
-                : item.kind === 'task'
+                : item.kind === 'input'
+                  ? 'Nothing done yet.'
+                  : item.kind === 'task'
                   ? 'Not done yet.'
                   : 'Nothing logged yet.'}
             </Text>
@@ -642,6 +781,8 @@ const styles = StyleSheet.create({
   growth: { marginBottom: 20 },
   journeyHint: { fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: 4 },
   section: { marginBottom: 20 },
+  about: { fontSize: 14, color: colors.muted, lineHeight: 20 },
+  batchHeadline: { marginTop: 12, marginBottom: 8 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 8 },
   spacedTitle: { marginTop: 20 },
   seedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
