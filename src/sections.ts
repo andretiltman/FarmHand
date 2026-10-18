@@ -8,7 +8,7 @@ export type SectionKey =
   | 'all'
   | 'sown'
   | 'seedlings'
-  | 'vegetables'
+  | 'harvest'
   | 'plants'
   | 'animals'
   | 'maintenance';
@@ -71,10 +71,10 @@ export const sections: Section[] = [
     includes: (item, now) => plantStage(item, now) === 'seedling',
   },
   {
-    key: 'vegetables',
-    label: 'Vegetables',
-    emoji: '🥕',
-    emptyTitle: 'No vegetables yet',
+    key: 'harvest',
+    label: 'Harvest',
+    emoji: '🧺',
+    emptyTitle: 'Nothing growing yet',
     emptyText: 'Crops you grew from seed show up here once they are past the seedling stage.',
     includes: (item, now) => {
       const stage = plantStage(item, now);
@@ -86,7 +86,7 @@ export const sections: Section[] = [
     label: 'Plants',
     emoji: '🪴',
     emptyTitle: 'No plants yet',
-    emptyText: 'Houseplants, trees and other plants you water show up here (crops grown from seed are under Vegetables).',
+    emptyText: 'Houseplants, trees and other plants you water show up here (crops grown from seed are under Harvest).',
     includes: (item) => item.kind === 'plant' && !item.growth,
   },
   {

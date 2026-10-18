@@ -12,7 +12,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, animals due a feed, walk, groom, ride or clean-out, and maintenance tasks that are due – grouped by category, e.g. *🌰 Seeds 3* or *🛠️ Maintenance 1*, showing how many need doing. Tap a group to open it up and see what needs doing. Shows *All caught up* when there's nothing to do.
   - 🌰 **Seeds** – seeds that have been sown but haven't sprouted yet.
   - 🌱 **Seedlings** – sprouted, waiting to be transplanted.
-  - 🥕 **Vegetables** – crops grown from seed, once they're past the seedling stage (growing, ready and harvested).
+  - 🧺 **Harvest** – crops grown from seed, once they're past the seedling stage (growing, ready and harvested).
   - 🪴 **Plants** – houseplants, trees and other plants tracked for watering only.
   - 🐾 **Animals**.
   - 🛠️ **Maintenance** – recurring jobs.
@@ -104,7 +104,7 @@ src/growth.ts                   Seed → seedling → transplant → harvest sta
 src/stats.ts, src/dates.ts      Watering/task-due and egg-count calculations
 src/schedule.ts                 Maintenance tasks on set days of the week (e.g. Saturday 8:00 AM)
 src/care.ts                     Animal care jobs (feed / walk / groom / ride / clean) and animal types
-src/sections.ts                 Home screen sections (Overview / Seeds / Seedlings / Vegetables / Plants / Animals / Maintenance)
+src/sections.ts                 Home screen sections (Overview / Seeds / Seedlings / Harvest / Plants / Animals / Maintenance)
 src/components/AddItemModal.tsx Guided add popup (plant, animal or maintenance task)
 src/components/ScheduleEditor.tsx  How a maintenance task repeats (every N days, or set days and time)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
