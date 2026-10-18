@@ -5,15 +5,17 @@ import { dueSummary, DueStatus } from './stats';
 import { InputItem, PlantItem, TrackedItem } from './types';
 
 /**
- * Korean Natural Farming (KNF) inputs: home-made ferments and extracts like lactic acid bacteria (LAB) and
- * water-soluble calcium from eggshells in vinegar (WCA).
+ * Natural farming inputs: home-made ferments and extracts from Korean Natural Farming (KNF) – like lactic acid
+ * bacteria (LAB), indigenous microorganisms (IMO) and water-soluble calcium from eggshells in vinegar (WCA) – and
+ * from JADAM, a low-cost offshoot of KNF (JADAM microbial solution and liquid fertilizer).
  *
  * Batches are made step by step (e.g. LAB: rice wash → add milk → harvest the serum) and, once ready, are
  * diluted in water and given to plants. KNF feeds a plant what suits its stage of growth:
  *  - Vegetative growth (seedlings and leafy growth): LAB, FPJ.
  *  - Changeover (the week or two before flowering): WCAP, WCA – calcium to switch from leaves to flowers.
  *  - Flowering & fruiting: WCA, FFJ.
- * LAB suits every stage. Timings and dilutions are the usual ones; recipes vary between growers.
+ * LAB, IMO (on the soil) and JADAM's inputs suit every stage. Timings and dilutions are the usual ones; recipes
+ * vary between growers.
  */
 
 export type FeedStage = 'vegetative' | 'changeover' | 'fruiting';
@@ -32,8 +34,17 @@ export interface RecipeStep {
   how: string;
 }
 
+/** Which school of natural farming a recipe comes from. */
+export type FarmingSystem = 'KNF' | 'JADAM';
+
+export const SYSTEMS: Record<FarmingSystem, string> = {
+  KNF: 'Korean Natural Farming',
+  JADAM: 'JADAM',
+};
+
 export interface Recipe {
   id: string;
+  system: FarmingSystem;
   /** e.g. "Lactic acid bacteria". */
   name: string;
   /** e.g. "LAB". */
@@ -44,9 +55,13 @@ export interface Recipe {
   /** Usual days to wait before each step after the first. */
   waits: number[];
   /** 1 part to this many parts of water. */
-  dilution: number;
+  dilution?: number;
+  /** How much to use, for inputs that aren't simply diluted (e.g. IMO is scattered on the soil). */
+  dose?: string;
   /** The stages of growth it's given at. */
   stages: FeedStage[];
+  /** How often it's given while it suits the plant's stage; FEED_EVERY_DAYS when absent. */
+  everyDays?: number;
   /** How to use and keep it. */
   use: string;
 }
@@ -54,6 +69,7 @@ export interface Recipe {
 export const RECIPES: Recipe[] = [
   {
     id: 'lab',
+    system: 'KNF',
     name: 'Lactic acid bacteria',
     short: 'LAB',
     emoji: '🥛',
@@ -81,7 +97,48 @@ export const RECIPES: Recipe[] = [
     use: 'Water onto the soil or spray on the leaves, at any stage. Keep the serum in the fridge, or mix it 1:1 with molasses or brown sugar to keep it at room temperature. It\'s also used in animals\' drinking water and on coop bedding.',
   },
   {
+    id: 'imo',
+    system: 'KNF',
+    name: 'Indigenous microorganisms',
+    short: 'IMO',
+    emoji: '🍚',
+    about: 'Fungi and bacteria collected from a nearby forest and multiplied up, to bring your soil to life.',
+    steps: [
+      {
+        title: 'Start',
+        done: 'Rice box set out',
+        how: 'Fill a small wooden box about ⅓ deep with cooked rice (a little on the hard side). Cover it with paper, tie it down and leave it on the leaf litter in a nearby forest or bamboo grove, sheltered from rain and animals.',
+      },
+      {
+        title: 'Mix with sugar (IMO2)',
+        done: 'IMO2 made',
+        how: 'After 3–5 days the rice is covered in white mould (throw it out if the mould is black or brightly coloured). Mix it with the same weight of brown sugar, pack it into a jar about ⅔ full and cover with paper.',
+      },
+      {
+        title: 'Mix into bran (IMO3)',
+        done: 'IMO3 made',
+        how: 'Dilute IMO2 1:1000 in water and mix it into rice or wheat bran until it holds together when squeezed but doesn\'t drip. Pile it about 30 cm high on bare ground under a roof, cover with straw or cloth, and turn it if it gets hotter than about 50 °C.',
+      },
+      {
+        title: 'Mix with soil (IMO4)',
+        done: 'IMO4 made',
+        how: 'After 5–7 days, when it\'s covered in white mycelium and cooling down, mix it with the same amount of soil from your garden. Moisten it the same way, pile it up and cover it again.',
+      },
+      {
+        title: 'Finish',
+        done: 'IMO4 ready',
+        how: 'After 5–7 days, once it has cooled and smells sweet and earthy, it\'s ready. Keep it covered and slightly moist in the shade.',
+      },
+    ],
+    waits: [4, 7, 7, 7],
+    dose: 'Scatter a thin layer on the soil',
+    stages: ['vegetative', 'changeover', 'fruiting'],
+    everyDays: 30,
+    use: 'Scatter IMO4 thinly over beds a week or so before planting, or around plants, and cover with mulch. Water it in with diluted LAB or FPJ to give the microbes a boost. IMO2 keeps for months and can be used to start another IMO3.',
+  },
+  {
     id: 'wca',
+    system: 'KNF',
     name: 'Water-soluble calcium',
     short: 'WCA',
     emoji: '🥚',
@@ -105,6 +162,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: 'wcap',
+    system: 'KNF',
     name: 'Water-soluble calcium phosphate',
     short: 'WCAP',
     emoji: '🦴',
@@ -128,6 +186,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: 'fpj',
+    system: 'KNF',
     name: 'Fermented plant juice',
     short: 'FPJ',
     emoji: '🌱',
@@ -151,6 +210,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: 'ffj',
+    system: 'KNF',
     name: 'Fermented fruit juice',
     short: 'FFJ',
     emoji: '🍌',
@@ -172,6 +232,54 @@ export const RECIPES: Recipe[] = [
     stages: ['fruiting'],
     use: 'Spray on the leaves or water onto the soil while flowering and fruiting.',
   },
+  {
+    id: 'jms',
+    system: 'JADAM',
+    name: 'JADAM microbial solution',
+    short: 'JMS',
+    emoji: '🥔',
+    about: 'A quick, cheap brew of soil microbes from leaf mould, fed on potato. Brings the soil to life.',
+    steps: [
+      {
+        title: 'Start',
+        done: 'Brew started',
+        how: 'For about 20 L of rain or dechlorinated water: put 100 g of leaf mould (the crumbly soil under fallen leaves in a forest) and 200 g of boiled potato in a cloth bag. Squeeze and knead the bag in the water until the potato is mashed through, then add a teaspoon of sea salt. Leave it in a warm spot.',
+      },
+      {
+        title: 'Check it’s ready',
+        done: 'Ready',
+        how: 'After 1–3 days (longer in cold weather) it\'s bubbly with a foamy film on top. That\'s its peak – use it straight away, it doesn\'t keep.',
+      },
+    ],
+    waits: [2],
+    dilution: 10,
+    stages: ['vegetative', 'changeover', 'fruiting'],
+    use: 'Water it onto the soil within a day or so of it peaking – as it is, or diluted up to 1:10. Mix in JLF to feed as well. Make a fresh batch each time.',
+  },
+  {
+    id: 'jlf',
+    system: 'JADAM',
+    name: 'JADAM liquid fertilizer',
+    short: 'JLF',
+    emoji: '🪣',
+    about: 'Weeds and plant scraps fermented in water into a complete liquid fertilizer, for next to nothing.',
+    steps: [
+      {
+        title: 'Start',
+        done: 'Drum filled',
+        how: 'Fill a drum or bucket with weeds, grass or plant scraps – ideally from the crop you\'ll feed. Add a handful of leaf mould, top up with water so it\'s all covered and put a lid on loosely.',
+      },
+      {
+        title: 'Check it’s ready',
+        done: 'Ready',
+        how: 'It smells bad for the first few weeks, then mellows. After about 3 months (sooner in hot weather) it\'s ready to use; it keeps improving for 6 months or more.',
+      },
+    ],
+    waits: [90],
+    dilution: 20,
+    stages: ['vegetative', 'changeover', 'fruiting'],
+    use: 'Strain and dilute about 1:20 with water (weaker for seedlings), and water onto the soil. Mix it with JMS to feed the soil life too. Top the drum up with more plant material as you use it.',
+  },
 ];
 
 /** Recipe id for an input of your own, e.g. OHN or FAA. */
@@ -187,6 +295,7 @@ export function batchRecipe(batch: InputItem): Recipe {
   return (
     findRecipe(batch.recipeId) ?? {
       id: OTHER_INPUT,
+      system: 'KNF',
       name: batch.name,
       short: batch.name,
       emoji: '🧪',
@@ -207,6 +316,11 @@ export function batchRecipe(batch: InputItem): Recipe {
 export function dilutionText(dilution: number): string {
   const ml = Math.round((1000 / dilution) * 10) / 10;
   return `${ml} ml per litre (1:${dilution})`;
+}
+
+/** How much to use: "1 ml per litre (1:1000)", or e.g. "Scatter a thin layer on the soil". */
+export function doseText(recipe: Recipe): string {
+  return recipe.dose ?? dilutionText(recipe.dilution ?? 1000);
 }
 
 // ---- Batches ---------------------------------------------------------------------------------------------
@@ -338,7 +452,8 @@ export function recommendedInputs(plant: PlantItem, ready: Set<string>, now: Dat
   if (!stage) return [];
   return RECIPES.filter((r) => r.stages.includes(stage)).map((recipe) => {
     const last = lastGiven(plant, recipe.id);
-    return { key: recipe.id, recipe, last, status: dueSummary(last, FEED_EVERY_DAYS, now).status, haveReady: ready.has(recipe.id) };
+    const every = recipe.everyDays ?? FEED_EVERY_DAYS;
+    return { key: recipe.id, recipe, last, status: dueSummary(last, every, now).status, haveReady: ready.has(recipe.id) };
   });
 }
 
@@ -347,11 +462,18 @@ export function inputsDue(plant: PlantItem, ready: Set<string>, now: Date = new 
   return recommendedInputs(plant, ready, now).filter((i) => i.haveReady && i.status !== 'ok');
 }
 
-/** "1 ml LAB + 1 ml WCA per litre of water". */
+/** "1 ml LAB + 1 ml WCA per litre of water", plus inputs that aren't diluted, e.g. "IMO on the soil". */
 export function mixText(keys: string[]): string {
-  const parts = keys.map((k) => {
+  const liquid = keys.filter((k) => !findRecipe(k)?.dose);
+  const solid = keys.filter((k) => findRecipe(k)?.dose);
+  const parts = liquid.map((k) => {
     const dilution = findRecipe(k)?.dilution ?? 1000;
     return `${Math.round((1000 / dilution) * 10) / 10} ml ${inputLabel(k)}`;
   });
-  return `${parts.join(' + ')} per litre of water`;
+  return [
+    parts.length ? `${parts.join(' + ')} per litre of water` : '',
+    solid.length ? `${solid.map(inputLabel).join(' + ')} on the soil` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
 }

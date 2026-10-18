@@ -1,7 +1,7 @@
 import { CARE, careEvery, careStatuses } from './care';
 import { findCrop } from './crops';
 import { growthStatus, transplantSuccess } from './growth';
-import { batchStatus, batchSteps, feedStage, inputLabel, inputsDue, readyInputs } from './natural';
+import { batchStatus, batchSteps, doseText, feedStage, inputLabel, inputsDue, readyInputs } from './natural';
 import { describeSchedule, validSchedule, WEEKDAYS } from './schedule';
 import { animalSummary, plantSummary, taskSummary } from './stats';
 import { checkSnapshot, isSnapshot, SyncSnapshot } from './sync';
@@ -148,7 +148,8 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
           next_step_date: b.dueAt ? b.dueAt.toISOString() : null,
           started: item.stepsDone[0],
           ready: steps[steps.length - 1].done ? item.stepsDone[steps.length - 1] : null,
-          dilution: `1:${b.recipe.dilution}`,
+          dilution: b.recipe.dilution ? `1:${b.recipe.dilution}` : null,
+          dose: doseText(b.recipe),
         },
       });
     } else {

@@ -1,6 +1,6 @@
 # FarmHand
 
-A simple mobile app for tracking your plants (their journey from seed to harvest, how often you water them, and the natural farming inputs you give them), batches of Korean Natural Farming inputs you're making (like lactic acid bacteria and eggshell calcium), your animals (feeding chickens, counting their eggs and cleaning the coop, walking and grooming the dogs, grooming, riding and mucking out the horses) and recurring maintenance jobs (like adding bio enzymes to the septic tank). Built with [Expo](https://expo.dev) / React Native, so it runs on iOS, Android and the web.
+A simple mobile app for tracking your plants (their journey from seed to harvest, how often you water them, and the natural farming inputs you give them), batches of Korean Natural Farming and JADAM inputs you're making (like lactic acid bacteria, indigenous microorganisms and eggshell calcium), your animals (feeding chickens, counting their eggs and cleaning the coop, walking and grooming the dogs, grooming, riding and mucking out the horses) and recurring maintenance jobs (like adding bio enzymes to the septic tank). Built with [Expo](https://expo.dev) / React Native, so it runs on iOS, Android and the web.
 
 ## Features
 
@@ -18,11 +18,14 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - 🐾 **Animals**.
   - 🛠️ **Maintenance** – recurring jobs.
 - **Maintenance tasks** – recurring jobs like *Septic tank bio enzymes* (monthly), *Clean gutters* or *Service lawnmower*. Pick a suggestion or type your own, choose how often it repeats (weekly to yearly, or any number of days) – or pick **On set days** for jobs tied to a day of the week, like *Rubbish collection* every Saturday at 8:00 AM (pick one or more days, and optionally a time). Say when it was last done so it doesn't start out overdue. Each shows when it's next due (orange when due, red when overdue). A set-day task is due on its day and shows *Missed yesterday* in red if the day passes without it being done; ticking it off the day before (putting the bins out the night before) counts for that day.
-- **Natural farming inputs (KNF)** – tap **＋ Add** → 🧪 **Natural input** to start a batch of a Korean Natural Farming input, and FarmHand walks you through making it and reminds you when each step is due:
+- **Natural farming inputs (KNF and JADAM)** – tap **＋ Add** → 🧪 **Natural input** to start a batch of a Korean Natural Farming or JADAM input, and FarmHand walks you through making it and reminds you when each step is due:
   - 🥛 **LAB** (lactic acid bacteria) – rice wash → add milk (~5 days) → harvest the serum (~7 days).
+  - 🍚 **IMO** (indigenous microorganisms) – a box of rice in the forest → mix with sugar, IMO2 (~4 days) → mix into bran, IMO3 (~7 days) → mix with soil, IMO4 (~7 days) → ready (~7 days). Scattered on the soil rather than diluted, and suggested monthly.
   - 🥚 **WCA** (water-soluble calcium) – roasted eggshells in brown rice vinegar → strain when the bubbling stops (~10 days).
   - 🦴 **WCAP** (water-soluble calcium phosphate) – charred bones in vinegar → strain (~14 days).
   - 🌱 **FPJ** (fermented plant juice) and 🍌 **FFJ** (fermented fruit juice) – packed with brown sugar → strain (~7 days).
+  - 🥔 **JMS** (JADAM microbial solution) – leaf mould and boiled potato squeezed into water → bubbly and ready (~2 days); used straight away, up to 1:10.
+  - 🪣 **JLF** (JADAM liquid fertilizer) – weeds or plant scraps in water with a handful of leaf mould → ready (~3 months); used at 1:20.
   - 🧪 **Something else** – your own input (e.g. OHN or fish amino acid), with however long it takes to be ready.
 
   Each batch shows the recipe as a checklist with how to do each step, *Time to add milk* / *Strain in 4 days* on its card (orange when a step is due, with a ✓ **Done** button), and once it's ready, how to use it (e.g. *1 ml per litre (1:1000)*). Already have a jar made? Pick *Already made – ready to use*. Mark a batch **used up** when it's finished. Timings are typical; ferments go faster in warm weather, so do each step when it's ready rather than strictly on the date.
@@ -30,6 +33,7 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - 🌿 **Vegetative growth** (seedlings and leafy growth): LAB, FPJ.
   - 🔄 **Changeover** (the ~10 days before flowering): LAB, WCAP, WCA.
   - 🌼 **Flowering & fruiting**: LAB, WCA, FFJ.
+  - At every stage: IMO (monthly), JMS and JLF.
 
   Flowering is estimated from the crop's timeline (*Flowering in ~7 days*); tap **It has started flowering** when you see the first flowers to switch it straight away. Leafy and root crops (lettuce, carrots, onions, …) stay in vegetative growth. When a plant is due an input you have a ready batch of (weekly), it shows up on the overview with a 🧪 **Feed** button; tap it (or **Give natural inputs** in its details) and tick what you gave – it shows how much of each to mix per litre of water, and the feed is added to the plant's history. Inputs you don't have a batch of are never nagged about.
 - **Animal care** – each animal tracks the jobs it needs: 🌾 **Feed**, 🐾 **Walk**, 🧼 **Groom**, 🏇 **Ride** and 🧹 **Clean** (the coop) / **Muck out** (the stable), plus 🥚 **Eggs** for laying birds. Each job has its own colour, on the card buttons and in the details popup. Cleaning out is done for the whole group at once, so it never asks which named animals it was for. Picking a type fills in the usual ones – chickens, ducks and quail: feed daily, clean the coop weekly and collect eggs; dogs: feed and walk daily, groom weekly; horses: feed, groom and muck out daily, ride every 2 days; snakes: feed by size, from every 5 days for a hatchling to every 3 weeks for a large adult – and you can turn jobs on or off and change how often each is due, when adding the animal or later in its details.
@@ -74,7 +78,7 @@ FarmHand then creates these sensors:
 | `sensor.farmhand_<plant name>` (watering only) | `never`, `ok`, `due`, `overdue` | `days_until_water_due`, `last_watered`, `water_every_days`, `tags` |
 | `sensor.farmhand_<animal name>` (laying birds) | eggs collected today | `eggs_last_7_days`, `eggs_total`, `needs_care`, `fed_today`, `last_fed`, `head_count`, `names`, and for each job `<job>_status`, `last_<fed/walked/groomed/ridden/cleaned>`, `<job>_every_days` |
 | `sensor.farmhand_<animal name>` (other animals) | most pressing job: `never`, `ok`, `due`, `overdue` | `needs_care` (e.g. `walk, clean`), plus the same per-job attributes |
-| `sensor.farmhand_<batch name>` (natural inputs) | `brewing`, `due` (a step is due), `ready`, `used_up` | `input` (e.g. `LAB`), `headline` (*Time to add milk*), `needs_action`, `step`, `steps`, `next_step`, `next_step_date`, `started`, `ready`, `dilution` |
+| `sensor.farmhand_<batch name>` (natural inputs) | `brewing`, `due` (a step is due), `ready`, `used_up` | `input` (e.g. `LAB`), `headline` (*Time to add milk*), `needs_action`, `step`, `steps`, `next_step`, `next_step_date`, `started`, `ready`, `dilution` (e.g. `1:1000`), `dose` (e.g. *1 ml per litre (1:1000)*) |
 | `sensor.farmhand_<task name>` | `never`, `ok`, `due`, `overdue` | `due` (*Due in 23 days*, *Due Sat at 8:00 AM*), `days_until_due`, `every_days`, `schedule` (*every Saturday at 8:00 AM*), `schedule_days`, `schedule_time`, `last_done` |
 | `sensor.farmhand_plants_to_water` | number of plants due, overdue or never watered | |
 | `sensor.farmhand_plants_to_feed` | number of plants due a natural input you have a batch of ready | |
@@ -120,7 +124,7 @@ src/seasons.ts                  Hemisphere-aware seasons and sowing advice
 src/growth.ts                   Seed → seedling → transplant → harvest stage logic
 src/stats.ts, src/dates.ts      Watering/task-due and egg-count calculations
 src/schedule.ts                 Maintenance tasks on set days of the week (e.g. Saturday 8:00 AM)
-src/natural.ts                  Natural farming inputs: recipes, batch steps, growth stages and what to feed when
+src/natural.ts                  Natural farming inputs (KNF and JADAM): recipes, batch steps, growth stages and what to feed when
 src/care.ts                     Animal care jobs (feed / walk / groom / ride / clean) and animal types
 src/sections.ts                 Home screen sections (Overview / Seeds / Seedlings / Harvest / Plants / Inputs / Animals / Maintenance)
 src/components/AddItemModal.tsx Guided add popup (plant, animal, maintenance task or natural input)

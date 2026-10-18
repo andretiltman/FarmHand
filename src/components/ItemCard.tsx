@@ -4,7 +4,7 @@ import { careStatuses, speciesEmoji } from '../care';
 import { findCrop } from '../crops';
 import { daysBetween, formatDays, relativeDay } from '../dates';
 import { growthStatus } from '../growth';
-import { batchStatus, dilutionText, inputLabel, inputsDue } from '../natural';
+import { batchStatus, doseText, inputLabel, inputsDue } from '../natural';
 import { shortSchedule, validSchedule } from '../schedule';
 import { animalSummary, DueStatus, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
@@ -99,7 +99,7 @@ export function ItemCard({ item, ready, onPress, onWater, onFeed, onStep, onCare
     const label = inputLabel(s.recipe.id);
     if (s.state === 'ready') {
       line1 = `${label} · ready ${relativeDay(item.stepsDone[item.stepsDone.length - 1])}`;
-      line2 = `✓ Ready · ${dilutionText(s.recipe.dilution)}`;
+      line2 = `✓ Ready · ${doseText(s.recipe)}`;
       line2Color = colors.plant;
     } else if (s.state === 'usedUp') {
       line1 = `${label} · started ${relativeDay(item.stepsDone[0])}`;

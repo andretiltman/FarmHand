@@ -5,7 +5,17 @@ import { CARE, careJob, findSpecies, joinNames, SPECIES_PRESETS, SpeciesPreset, 
 import { CROPS, Crop, findCrop } from '../crops';
 import { addDays, approxDays, formatShortDate, plural } from '../dates';
 import { growthStatus } from '../growth';
-import { batchStatus, batchSteps, findRecipe, OTHER_INPUT, OTHER_READY_DAYS, Recipe, RECIPES } from '../natural';
+import {
+  batchStatus,
+  batchSteps,
+  FarmingSystem,
+  findRecipe,
+  OTHER_INPUT,
+  OTHER_READY_DAYS,
+  Recipe,
+  RECIPES,
+  SYSTEMS,
+} from '../natural';
 import { sowingAdvice } from '../seasons';
 import { colors, radius } from '../theme';
 import { describeSchedule } from '../schedule';
@@ -319,7 +329,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
           <KindOption
             emoji="🧪"
             title="Natural input"
-            description="Make LAB, calcium vinegar (WCA) and other natural farming inputs for your plants"
+            description="Make LAB, IMO, calcium vinegar (WCA), JADAM inputs and more for your plants"
             color={colors.input}
             soft={colors.inputSoft}
             onPress={() => chooseKind('input')}
@@ -329,27 +339,33 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
 
       {step === 'recipe' && (
         <ScrollView style={styles.shrink}>
-          {RECIPES.map((r) => (
-            <Pressable
-              key={r.id}
-              onPress={() => chooseRecipe(r)}
-              style={({ pressed }) => [
-                styles.otherTile,
-                recipeId === r.id && styles.inputSelected,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`${r.name}, ${r.short}`}
-            >
-              <Text style={styles.otherEmoji}>{r.emoji}</Text>
-              <View style={styles.shrink}>
-                <Text style={styles.otherTitle}>
-                  {r.short} · {r.name}
-                </Text>
-                <Text style={styles.otherDesc}>{r.about}</Text>
-              </View>
-            </Pressable>
-          ))}
+          {(Object.keys(SYSTEMS) as FarmingSystem[]).flatMap((system) => [
+            <Text key={system} style={[styles.label, system === 'KNF' && styles.firstLabel]}>
+              {SYSTEMS[system]}
+            </Text>,
+            ...RECIPES.filter((r) => r.system === system).map((r) => (
+              <Pressable
+                key={r.id}
+                onPress={() => chooseRecipe(r)}
+                style={({ pressed }) => [
+                  styles.otherTile,
+                  recipeId === r.id && styles.inputSelected,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`${r.name}, ${r.short}`}
+              >
+                <Text style={styles.otherEmoji}>{r.emoji}</Text>
+                <View style={styles.shrink}>
+                  <Text style={styles.otherTitle}>
+                    {r.short} · {r.name}
+                  </Text>
+                  <Text style={styles.otherDesc}>{r.about}</Text>
+                </View>
+              </Pressable>
+            )),
+          ])}
+          <Text style={styles.label}>Your own</Text>
           <Pressable
             onPress={() => chooseRecipe(null)}
             style={({ pressed }) => [

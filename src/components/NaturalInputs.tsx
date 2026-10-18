@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatShortDate, relativeDay } from '../dates';
 import {
   batchSteps,
-  dilutionText,
+  doseText,
   FEED_STAGES,
   feedStage,
   findRecipe,
@@ -70,7 +70,7 @@ export function PlantInputs({ plant, ready, onGive, onSetFlowered }: PlantInputs
               <Text style={styles.rowTitle}>
                 {r.recipe.short} <Text style={styles.rowName}>· {r.recipe.name}</Text>
               </Text>
-              <Text style={styles.muted}>{dilutionText(r.recipe.dilution)}</Text>
+              <Text style={styles.muted}>{doseText(r.recipe)}</Text>
               {!r.haveReady && <Text style={styles.muted}>No batch ready – start one with ＋ Add → Natural input</Text>}
             </View>
             <Text style={[styles.rowStatus, { color: due && r.haveReady ? colors.warning : due ? colors.muted : colors.plant }]}>
@@ -125,7 +125,7 @@ export function InputPicker({ plant, choices, ready, given, onChange }: PickerPr
         const on = given.includes(key);
         const recipe = findRecipe(key);
         const notes = [
-          recipe ? dilutionText(recipe.dilution) : null,
+          recipe ? doseText(recipe) : null,
           recommended.has(key) ? 'Suits this stage' : null,
           ready.has(key) ? 'Batch ready' : null,
         ].filter(Boolean);
@@ -185,7 +185,7 @@ export function BatchSteps({ batch, recipe, guide }: { batch: InputItem; recipe:
       {!!recipe.use && (
         <View style={styles.use}>
           <Text style={styles.useTitle}>How to use</Text>
-          <Text style={styles.useText}>💧 {dilutionText(recipe.dilution)}</Text>
+          <Text style={styles.useText}>💧 {doseText(recipe)}</Text>
           {recipe.stages.length > 0 && (
             <Text style={styles.useText}>
               🌱 {recipe.stages.map((s) => `${FEED_STAGES[s].emoji} ${FEED_STAGES[s].label}`).join(', ')}
