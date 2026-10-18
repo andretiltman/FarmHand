@@ -5,9 +5,10 @@ import { asksWho, CARE, CARE_KINDS, careJob, careLogText, careStatuses, speciesE
 import { findCrop } from '../crops';
 import { formatDateTime, relativeDay } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
+import { shortSchedule, validSchedule } from '../schedule';
 import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
-import { AnimalItem, CareKind, Growth, hasPhotos, TrackedItem } from '../types';
+import { AnimalItem, CareKind, Growth, hasPhotos, TaskSchedule, TrackedItem } from '../types';
 import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
@@ -16,6 +17,7 @@ import { MilestoneEditor } from './MilestoneEditor';
 import { NamesEditor, WhoPicker } from './NamePicker';
 import { PhotoLog } from './PhotoLog';
 import { PhotoViewer } from './PhotoViewer';
+import { ScheduleEditor } from './ScheduleEditor';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
 import { TagPicker } from './TagPicker';
@@ -34,6 +36,7 @@ interface Props {
   onSetCareEvery: (id: string, kind: CareKind, days: number) => void;
   onCompleteTask: (id: string) => void;
   onSetTaskEvery: (id: string, days: number) => void;
+  onSetTaskSchedule: (id: string, schedule: TaskSchedule | undefined) => void;
   onAdvance: (id: string, action: StageAction) => void;
   onUpdateGrowth: (id: string, growth: Growth) => void;
   onAddPhoto: (id: string, pickedUri: string) => Promise<void>;
@@ -122,8 +125,9 @@ export function ItemDetailModal(props: Props) {
     }
   } else if (item.kind === 'task') {
     const s = taskSummary(item);
+    const schedule = validSchedule(item.schedule);
     stats = [
-      { label: 'Schedule', value: `Every ${item.everyDays}d` },
+      { label: 'Schedule', value: schedule ? shortSchedule(schedule) : `Every ${item.everyDays}d` },
       { label: 'Due', value: dueValue(s) },
       { label: 'Times done', value: String(item.done.length) },
     ];
@@ -494,12 +498,12 @@ export function ItemDetailModal(props: Props) {
 
         {item.kind === 'task' && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Repeat every</Text>
-            <Stepper
-              label="Repeat interval"
-              value={item.everyDays}
-              onChange={(days) => props.onSetTaskEvery(item.id, days)}
-              suffix={item.everyDays === 1 ? 'day' : 'days'}
+            <Text style={styles.sectionTitle}>Repeat</Text>
+            <ScheduleEditor
+              everyDays={item.everyDays}
+              schedule={item.schedule}
+              onChangeEvery={(days) => props.onSetTaskEvery(item.id, days)}
+              onChangeSchedule={(schedule) => props.onSetTaskSchedule(item.id, schedule)}
             />
           </View>
         )}

@@ -3,7 +3,15 @@ import { growthStatus } from './growth';
 import { plantSummary, taskSummary } from './stats';
 import { TrackedItem } from './types';
 
-export type SectionKey = 'overview' | 'all' | 'sown' | 'seedlings' | 'plants' | 'animals' | 'maintenance';
+export type SectionKey =
+  | 'overview'
+  | 'all'
+  | 'sown'
+  | 'seedlings'
+  | 'harvest'
+  | 'plants'
+  | 'animals'
+  | 'maintenance';
 
 export interface Section {
   key: SectionKey;
@@ -48,7 +56,7 @@ export const sections: Section[] = [
   },
   {
     key: 'sown',
-    label: 'Sown',
+    label: 'Seeds',
     emoji: '🌰',
     emptyTitle: 'No seeds waiting',
     emptyText: 'Seeds you sow show up here until they sprout.',
@@ -63,16 +71,23 @@ export const sections: Section[] = [
     includes: (item, now) => plantStage(item, now) === 'seedling',
   },
   {
+    key: 'harvest',
+    label: 'Harvest',
+    emoji: '🧺',
+    emptyTitle: 'Nothing growing yet',
+    emptyText: 'Crops you grew from seed show up here once they are past the seedling stage.',
+    includes: (item, now) => {
+      const stage = plantStage(item, now);
+      return !!stage && stage !== 'seed' && stage !== 'seedling';
+    },
+  },
+  {
     key: 'plants',
     label: 'Plants',
     emoji: '🪴',
     emptyTitle: 'No plants yet',
-    emptyText: 'Growing and established plants show up here.',
-    includes: (item, now) => {
-      if (item.kind !== 'plant') return false;
-      const stage = plantStage(item, now);
-      return stage !== 'seed' && stage !== 'seedling';
-    },
+    emptyText: 'Houseplants, trees and other plants you water show up here (crops grown from seed are under Harvest).',
+    includes: (item) => item.kind === 'plant' && !item.growth,
   },
   {
     key: 'animals',
@@ -91,3 +106,6 @@ export const sections: Section[] = [
     includes: (item) => item.kind === 'task',
   },
 ];
+
+/** The groups the overview is split into, so it reads e.g. "🌰 Seeds 3" (each item is in exactly one). */
+export const overviewGroups: Section[] = sections.filter((s) => s.key !== 'overview' && s.key !== 'all');

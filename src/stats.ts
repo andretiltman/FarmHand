@@ -1,4 +1,5 @@
 import { daysBetween, isSameDay, isWithinLastDays, relativeDay } from './dates';
+import { scheduleStatus, validSchedule } from './schedule';
 import { AnimalItem, PlantItem, TaskItem } from './types';
 
 /** How a recurring job (watering, a maintenance task) stands against its schedule. */
@@ -44,10 +45,13 @@ export interface TaskSummary extends DueSummary {
 
 export function taskSummary(task: TaskItem, now: Date = new Date()): TaskSummary {
   const last = task.done[0];
-  return {
-    ...dueSummary(last, task.everyDays, now),
-    lastDoneLabel: last ? `Done ${relativeDay(last, now)}` : 'Not done yet',
-  };
+  const schedule = validSchedule(task.schedule);
+  let due: DueSummary;
+  if (schedule) {
+    const { status, daysUntilDue, dueLabel } = scheduleStatus(schedule, last, task.createdAt, now);
+    due = { status, daysUntilDue, dueLabel };
+  } else due = dueSummary(last, task.everyDays, now);
+  return { ...due, lastDoneLabel: last ? `Done ${relativeDay(last, now)}` : 'Not done yet' };
 }
 
 export interface AnimalSummary {

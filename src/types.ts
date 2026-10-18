@@ -118,13 +118,23 @@ export interface AnimalItem extends Syncable {
   createdAt: string;
 }
 
+/** Set days of the week a task is done on, e.g. rubbish collection every Saturday at 8am. */
+export interface TaskSchedule {
+  /** Days of the week, 0 = Sunday … 6 = Saturday. */
+  days: number[];
+  /** "HH:MM" (24-hour); absent when any time that day will do. */
+  time?: string;
+}
+
 /** A recurring maintenance job, e.g. adding bio enzymes to the septic tank. */
 export interface TaskItem extends Syncable {
   id: string;
   kind: 'task';
   name: string;
-  /** How often the task should be done, in days. */
+  /** How often the task should be done, in days. Ignored while it has a `schedule`. */
   everyDays: number;
+  /** Set when the task is done on set days of the week rather than every `everyDays`. */
+  schedule?: TaskSchedule;
   /** ISO timestamps of each time it was done, newest first. */
   done: string[];
   createdAt: string;

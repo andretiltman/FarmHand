@@ -11,12 +11,17 @@ import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
 import { SeedsModal } from './src/components/SeedsModal';
 import { TransferModal } from './src/components/TransferModal';
-import { SectionKey, sections } from './src/sections';
+import { overviewGroups, SectionKey, sections } from './src/sections';
 import { colors, radius } from './src/theme';
-import { CareKind } from './src/types';
+import { CareKind, TrackedItem } from './src/types';
 import { useHomeAssistant } from './src/useHomeAssistant';
 import { useItems } from './src/useItems';
 import { useSeeds } from './src/useSeeds';
+
+/** A row on the list: an item, or (on the overview) a group heading with how many need doing. */
+type Row =
+  | { type: 'item'; item: TrackedItem }
+  | { type: 'group'; key: SectionKey; emoji: string; label: string; count: number; open: boolean };
 
 export default function App() {
   return (
@@ -52,6 +57,7 @@ function HomeScreen() {
     keepAnimals,
     completeTask,
     setTaskEvery,
+    setTaskSchedule,
     advanceStage,
     updateGrowth,
     addPhoto,
@@ -71,6 +77,8 @@ function HomeScreen() {
   /** Set when a card's care button opens the details popup to pick which named animals it was for. */
   const [startCare, setStartCare] = useState<CareKind | null>(null);
   const [sectionKey, setSectionKey] = useState<SectionKey>('overview');
+  /** Overview groups that are opened up to show their items (they start closed, showing just a count). */
+  const [openGroups, setOpenGroups] = useState<SectionKey[]>([]);
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
   const bySection = useMemo(() => {
@@ -106,6 +114,21 @@ function HomeScreen() {
     if (x !== undefined) tabsRef.current?.scrollTo({ x: Math.max(0, x - 40), animated: true });
   }, [sectionKey]);
   const visible = bySection[sectionKey];
+
+  // The overview lists a row per group – e.g. "🌰 Seeds 3" – that opens up to show what needs doing.
+  const rows: Row[] = useMemo(() => {
+    if (sectionKey !== 'overview') return visible.map((item) => ({ type: 'item', item }));
+    const now = new Date();
+    return overviewGroups.flatMap((g): Row[] => {
+      const groupItems = visible.filter((i) => g.includes(i, now));
+      if (!groupItems.length) return [];
+      const open = openGroups.includes(g.key);
+      const header: Row = { type: 'group', key: g.key, emoji: g.emoji, label: g.label, count: groupItems.length, open };
+      return open ? [header, ...groupItems.map((item): Row => ({ type: 'item', item }))] : [header];
+    });
+  }, [sectionKey, visible, openGroups]);
+  const toggleGroup = (key: SectionKey) =>
+    setOpenGroups((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   const plantCount = items.filter((i) => i.kind === 'plant').length;
   const animalCount = items.filter((i) => i.kind === 'animal').length;
@@ -190,28 +213,49 @@ function HomeScreen() {
         <ActivityIndicator style={styles.flex} color={colors.primary} />
       ) : (
         <FlatList
-          data={visible}
-          keyExtractor={(i) => i.id}
-          contentContainerStyle={[styles.list, visible.length === 0 && styles.flex]}
+          data={rows}
+          keyExtractor={(r) => (r.type === 'group' ? `group-${r.key}` : r.item.id)}
+          contentContainerStyle={[styles.list, rows.length === 0 && styles.flex]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
-          renderItem={({ item }) => (
-            <ItemCard
-              item={item}
-              onPress={() => {
-                setStartCare(null);
-                setSelectedId(item.id);
-              }}
-              onWater={() => waterPlant(item.id)}
-              onCare={(kind) => {
-                if (item.kind === 'animal' && asksWho(item, kind)) {
-                  setStartCare(kind);
+          renderItem={({ item: row }) => {
+            if (row.type === 'group') {
+              return (
+                <Pressable
+                  onPress={() => toggleGroup(row.key)}
+                  style={({ pressed }) => [styles.group, pressed && { opacity: 0.7 }]}
+                  accessibilityRole="button"
+                  aria-expanded={row.open}
+                  accessibilityLabel={`${row.label}, ${row.count} to do`}
+                >
+                  <Text style={styles.groupEmoji}>{row.emoji}</Text>
+                  <Text style={styles.groupLabel}>{row.label}</Text>
+                  <View style={[styles.badge, styles.badgeAlert]}>
+                    <Text style={[styles.badgeText, styles.badgeTextOn]}>{row.count}</Text>
+                  </View>
+                  <Text style={styles.groupChevron}>{row.open ? '▾' : '▸'}</Text>
+                </Pressable>
+              );
+            }
+            const { item } = row;
+            return (
+              <ItemCard
+                item={item}
+                onPress={() => {
+                  setStartCare(null);
                   setSelectedId(item.id);
-                } else logCare(item.id, kind);
-              }}
-              onEgg={() => logEggs(item.id, 1)}
-              onDone={() => completeTask(item.id)}
-            />
-          )}
+                }}
+                onWater={() => waterPlant(item.id)}
+                onCare={(kind) => {
+                  if (item.kind === 'animal' && asksWho(item, kind)) {
+                    setStartCare(kind);
+                    setSelectedId(item.id);
+                  } else logCare(item.id, kind);
+                }}
+                onEgg={() => logEggs(item.id, 1)}
+                onDone={() => completeTask(item.id)}
+              />
+            );
+          }}
           ListEmptyComponent={
             items.length === 0 ? (
               <View style={styles.empty}>
@@ -314,6 +358,7 @@ function HomeScreen() {
         onSetCareEvery={setCareEvery}
         onCompleteTask={completeTask}
         onSetTaskEvery={setTaskEvery}
+        onSetTaskSchedule={setTaskSchedule}
         onAdvance={advanceStage}
         onUpdateGrowth={updateGrowth}
         onAddPhoto={addPhoto}
@@ -389,6 +434,19 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 12, fontWeight: '700', color: colors.muted },
   badgeTextOn: { color: colors.primaryText },
   list: { paddingHorizontal: 16, paddingBottom: 24 },
+  group: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 56,
+    paddingHorizontal: 16,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  groupEmoji: { fontSize: 22, marginRight: 10 },
+  groupLabel: { flex: 1, fontSize: 17, fontWeight: '700', color: colors.text },
+  groupChevron: { fontSize: 16, color: colors.muted, marginLeft: 12, width: 14, textAlign: 'center' },
   separator: { height: 10 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyEmoji: { fontSize: 48 },

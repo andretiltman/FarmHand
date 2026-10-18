@@ -9,13 +9,14 @@ A simple mobile app for tracking your plants (their journey from seed to harvest
   - Plants: when they were last watered and when they're next due (turns orange when due, red when overdue).
   - Animals: what's due – *Due: 🐾 Walk, 🧼 Groom* (orange when due, red when overdue) or *All looked after* – plus eggs collected today / over the last 7 days for laying birds.
 - **Sections** – chips at the top of the list filter what you see, each with a count:
-  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, animals due a feed, walk, groom, ride or clean-out, and maintenance tasks that are due. Shows *All caught up* when there's nothing to do.
-  - 🌰 **Sown** – seeds that haven't sprouted yet.
+  - ⭐ **Overview** (the default) – only what needs attention now: plants due, overdue or never watered, seedlings ready to transplant, crops ready to harvest, animals due a feed, walk, groom, ride or clean-out, and maintenance tasks that are due – grouped by category, e.g. *🌰 Seeds 3* or *🛠️ Maintenance 1*, showing how many need doing. Tap a group to open it up and see what needs doing. Shows *All caught up* when there's nothing to do.
+  - 🌰 **Seeds** – seeds that have been sown but haven't sprouted yet.
   - 🌱 **Seedlings** – sprouted, waiting to be transplanted.
-  - 🪴 **Plants** – growing, ready, harvested and watering-only plants.
+  - 🧺 **Harvest** – crops grown from seed, once they're past the seedling stage (growing, ready and harvested).
+  - 🪴 **Plants** – houseplants, trees and other plants tracked for watering only.
   - 🐾 **Animals**.
   - 🛠️ **Maintenance** – recurring jobs.
-- **Maintenance tasks** – recurring jobs like *Septic tank bio enzymes* (monthly), *Clean gutters* or *Service lawnmower*. Pick a suggestion or type your own, choose how often it repeats (weekly to yearly, or any number of days), and say when it was last done so it doesn't start out overdue. Each shows when it's next due (orange when due, red when overdue).
+- **Maintenance tasks** – recurring jobs like *Septic tank bio enzymes* (monthly), *Clean gutters* or *Service lawnmower*. Pick a suggestion or type your own, choose how often it repeats (weekly to yearly, or any number of days) – or pick **On set days** for jobs tied to a day of the week, like *Rubbish collection* every Saturday at 8:00 AM (pick one or more days, and optionally a time). Say when it was last done so it doesn't start out overdue. Each shows when it's next due (orange when due, red when overdue). A set-day task is due on its day and shows *Missed yesterday* in red if the day passes without it being done; ticking it off the day before (putting the bins out the night before) counts for that day.
 - **Animal care** – each animal tracks the jobs it needs: 🌾 **Feed**, 🐾 **Walk**, 🧼 **Groom**, 🏇 **Ride** and 🧹 **Clean** (the coop) / **Muck out** (the stable), plus 🥚 **Eggs** for laying birds. Each job has its own colour, on the card buttons and in the details popup. Cleaning out is done for the whole group at once, so it never asks which named animals it was for. Picking a type fills in the usual ones – chickens, ducks and quail: feed daily, clean the coop weekly and collect eggs; dogs: feed and walk daily, groom weekly; horses: feed, groom and muck out daily, ride every 2 days; snakes: feed by size, from every 5 days for a hatchling to every 3 weeks for a large adult – and you can turn jobs on or off and change how often each is due, when adding the animal or later in its details.
 - **Snakes** – pick a size (*Hatchling* 5 days, *Juvenile* 7, *Sub-adult* 10, *Adult* 14, *Large adult* 21) to set how often it's fed. As it grows, pick the next size in its details (or set any number of days).
 - **Seed inventory** – tap **＋ Add** → 🌰 **Seeds** to keep track of the seeds you have on hand (not yet sown): pick the crop, name the variety (e.g. *Cherry tomato*) and how many; **🌰 My seeds** shows the packets you have. When adding a plant, each crop tile shows how many seeds you have left, you pick which packet you're sowing from, it shows how many will be left, and saving takes the sown seeds out of the inventory. Tap a packet to 📷 take or choose photos of it (like plant photos – handy for the variety and sowing notes on the back), change how many are left, remove it, or send some to someone. The inventory isn't part of syncing between phones.
@@ -58,7 +59,7 @@ FarmHand then creates these sensors:
 | `sensor.farmhand_<plant name>` (watering only) | `never`, `ok`, `due`, `overdue` | `days_until_water_due`, `last_watered`, `water_every_days`, `tags` |
 | `sensor.farmhand_<animal name>` (laying birds) | eggs collected today | `eggs_last_7_days`, `eggs_total`, `needs_care`, `fed_today`, `last_fed`, `head_count`, `names`, and for each job `<job>_status`, `last_<fed/walked/groomed/ridden/cleaned>`, `<job>_every_days` |
 | `sensor.farmhand_<animal name>` (other animals) | most pressing job: `never`, `ok`, `due`, `overdue` | `needs_care` (e.g. `walk, clean`), plus the same per-job attributes |
-| `sensor.farmhand_<task name>` | `never`, `ok`, `due`, `overdue` | `due` (*Due in 23 days*), `days_until_due`, `every_days`, `last_done` |
+| `sensor.farmhand_<task name>` | `never`, `ok`, `due`, `overdue` | `due` (*Due in 23 days*, *Due Sat at 8:00 AM*), `days_until_due`, `every_days`, `schedule` (*every Saturday at 8:00 AM*), `schedule_days`, `schedule_time`, `last_done` |
 | `sensor.farmhand_plants_to_water` | number of plants due, overdue or never watered | |
 | `sensor.farmhand_eggs_today` | eggs collected today across all animals | |
 | `sensor.farmhand_tasks_due` | number of maintenance tasks due, overdue or never done | |
@@ -101,9 +102,11 @@ src/crops.ts                    Crop catalog: sowing method, timings, growing gu
 src/seasons.ts                  Hemisphere-aware seasons and sowing advice
 src/growth.ts                   Seed → seedling → transplant → harvest stage logic
 src/stats.ts, src/dates.ts      Watering/task-due and egg-count calculations
+src/schedule.ts                 Maintenance tasks on set days of the week (e.g. Saturday 8:00 AM)
 src/care.ts                     Animal care jobs (feed / walk / groom / ride / clean) and animal types
-src/sections.ts                 Home screen sections (Overview / Sown / Seedlings / Plants / Animals / Maintenance)
+src/sections.ts                 Home screen sections (Overview / Seeds / Seedlings / Harvest / Plants / Animals / Maintenance)
 src/components/AddItemModal.tsx Guided add popup (plant, animal or maintenance task)
+src/components/ScheduleEditor.tsx  How a maintenance task repeats (every N days, or set days and time)
 src/components/ItemDetailModal.tsx  Item history / logging / delete
 src/components/HomeAssistantModal.tsx  Connect to Home Assistant
 src/components/TransferModal.tsx  Send plants, animals, tasks and seeds to / receive them from another phone
