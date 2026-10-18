@@ -1,6 +1,7 @@
 import { CARE, careEvery, careStatuses } from './care';
 import { findCrop } from './crops';
 import { growthStatus, transplantSuccess } from './growth';
+import { lotOf } from './lots';
 import { batchStatus, batchSteps, doseText, feedStage, inputLabel, inputsDue, readyInputs } from './natural';
 import { describeSchedule, validSchedule, WEEKDAYS } from './schedule';
 import { animalSummary, plantSummary, taskSummary } from './stats';
@@ -78,6 +79,7 @@ export function buildSensors(items: TrackedItem[], now: Date = new Date()): HASe
         days_until_water_due: water.daysUntilDue,
         water_every_days: item.waterEveryDays,
         tags: item.tags.join(', '),
+        lot: lotOf(item) ?? null,
         last_watered: item.waterings[0] ?? null,
         knf_stage: feedStage(item, now)?.stage ?? null,
         inputs_due: feed.map((f) => f.recipe.short).join(', '),

@@ -339,20 +339,51 @@ export function useItems() {
     [updatePhotos],
   );
 
-  const waterPlant = useCallback(
-    (id: string) => {
+  /** Applies a change to each of the plants, e.g. everything in a lot. */
+  const updatePlants = useCallback((ids: string[], change: (plant: PlantItem) => PlantItem) => {
+    const wanted = new Set(ids);
+    setItems((prev) => prev.map((i) => (i.kind === 'plant' && wanted.has(i.id) ? change(i) : i)));
+  }, []);
+
+  /** Logs a watering now for each of the plants – one plant, or a whole lot at once. */
+  const waterPlants = useCallback(
+    (ids: string[]) => {
       const now = new Date().toISOString();
-      updatePlant(id, (p) => ({ ...p, waterings: [now, ...p.waterings] }));
+      updatePlants(ids, (p) => ({ ...p, waterings: [now, ...p.waterings] }));
     },
+    [updatePlants],
+  );
+
+  const waterPlant = useCallback((id: string) => waterPlants([id]), [waterPlants]);
+
+  /** Logs natural inputs (recipe ids, or "other:<name>") given now to each of the plants. */
+  const giveInputsTo = useCallback(
+    (ids: string[], given: string[]) => {
+      if (!given.length) return;
+      const log = { date: new Date().toISOString(), given };
+      updatePlants(ids, (p) => ({ ...p, inputs: [log, ...p.inputs] }));
+    },
+    [updatePlants],
+  );
+
+  const giveInputs = useCallback((id: string, given: string[]) => giveInputsTo([id], given), [giveInputsTo]);
+
+  /** Moves a plant to a lot, or takes it out of one (`undefined`). */
+  const setLot = useCallback(
+    (id: string, lot: string | undefined) => updatePlant(id, (p) => stamp({ ...p, lot: lot?.trim() || undefined }, 'lot')),
     [updatePlant],
   );
 
-  /** Logs natural inputs (recipe ids, or "other:<name>") given to a plant now. */
-  const giveInputs = useCallback(
-    (id: string, given: string[]) => {
-      if (!given.length) return;
-      const log = { date: new Date().toISOString(), given };
-      updatePlant(id, (p) => ({ ...p, inputs: [log, ...p.inputs] }));
+  /** Marks a tray-sown crop as transplanted now – with how many seedlings made it, if counted – to a lot. */
+  const transplant = useCallback(
+    (id: string, count: number | undefined, lot: string | undefined) => {
+      const now = new Date().toISOString();
+      updatePlant(id, (p) => {
+        if (!p.growth) return p;
+        const growth = { ...p.growth, transplantedAt: now };
+        if (count !== undefined) growth.transplantedCount = count;
+        return stamp({ ...p, growth, lot: lot?.trim() || undefined }, 'growth', 'lot');
+      });
     },
     [updatePlant],
   );
@@ -492,6 +523,7 @@ export function useItems() {
     setTags,
     setWaterEvery,
     waterPlant,
+    waterPlants,
     logEggs,
     logCare,
     setCare,
@@ -502,6 +534,9 @@ export function useItems() {
     setTaskEvery,
     setTaskSchedule,
     giveInputs,
+    giveInputsTo,
+    setLot,
+    transplant,
     setFlowered,
     advanceBatch,
     setUsedUp,

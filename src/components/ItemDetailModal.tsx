@@ -5,6 +5,7 @@ import { asksWho, CARE, CARE_KINDS, careJob, careLogText, careStatuses, speciesE
 import { findCrop } from '../crops';
 import { formatDateTime, formatShortDate, relativeDay } from '../dates';
 import { growthStatus, MilestoneKey, StageAction, transplantSuccess } from '../growth';
+import { GREENHOUSE, lotOf } from '../lots';
 import { batchStatus, batchSteps, inputLabel } from '../natural';
 import { shortSchedule, validSchedule } from '../schedule';
 import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
@@ -14,6 +15,7 @@ import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
 import { Journey } from './Journey';
+import { LotPicker } from './LotPicker';
 import { MilestoneEditor } from './MilestoneEditor';
 import { NamesEditor, WhoPicker } from './NamePicker';
 import { BatchSteps, InputPicker, inputChoices, inputsToTick, PlantInputs } from './NaturalInputs';
@@ -50,6 +52,11 @@ interface Props {
   onSetTaskEvery: (id: string, days: number) => void;
   onSetTaskSchedule: (id: string, schedule: TaskSchedule | undefined) => void;
   onAdvance: (id: string, action: StageAction) => void;
+  /** Marks a tray-sown crop as transplanted now, with how many seedlings made it (if counted), to a lot. */
+  onTransplant: (id: string, count: number | undefined, lot: string | undefined) => void;
+  /** Lots in use, to pick from (see lotNames). */
+  lots: string[];
+  onSetLot: (id: string, lot: string | undefined) => void;
   onUpdateGrowth: (id: string, growth: Growth) => void;
   onAddPhoto: (id: string, pickedUri: string) => Promise<void>;
   onSetPhotoDate: (id: string, photoId: string, takenAt: string) => void;
@@ -79,6 +86,8 @@ export function ItemDetailModal(props: Props) {
   const [newName, setNewName] = useState('');
   /** Seedlings to record when marking as transplanted; null means "all of them". */
   const [transplantCount, setTransplantCount] = useState<number | null>(null);
+  /** The lot to transplant to – starts as the plant's own lot, if it has one planned. */
+  const [transplantLot, setTransplantLot] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setEggCount(1);
@@ -88,10 +97,11 @@ export function ItemDetailModal(props: Props) {
       startCare && item?.kind === 'animal'
         ? { kind: 'care', care: startCare, who: whoToTick(item, startCare), fromCard: true }
         : startFeed && item?.kind === 'plant'
-          ? { kind: 'feed', given: inputsToTick(item, ready), fromCard: true }
+          ? { kind: 'feed', given: inputsToTick([item], ready), fromCard: true }
           : { kind: 'main' },
     );
     setTransplantCount(null);
+    setTransplantLot(item?.kind === 'plant' ? item.lot : undefined);
   }, [item?.id, startCare, startFeed]);
 
   if (!item) return null;
@@ -137,7 +147,9 @@ export function ItemDetailModal(props: Props) {
         [growth.sproutedAt, '🌱  Marked as seedling', true],
         [
           growth.transplantedAt,
-          success ? `🪴  Transplanted ${success.transplanted} of ${success.sown}` : '🪴  Transplanted',
+          `${success ? `🪴  Transplanted ${success.transplanted} of ${success.sown}` : '🪴  Transplanted'}${
+            item.lot ? ` to ${item.lot}` : ''
+          }`,
           true,
         ],
         [growth.floweredAt, '🌼  Started flowering', true],
@@ -319,8 +331,8 @@ export function ItemDetailModal(props: Props) {
         <ScrollView style={styles.body}>
           <Text style={styles.sectionTitle}>What did you give?</Text>
           <InputPicker
-            plant={item}
-            choices={inputChoices(item, props.batches, ready)}
+            plants={[item]}
+            choices={inputChoices([item], props.batches, ready)}
             ready={ready}
             given={view.given}
             onChange={(given) => setView({ ...view, given })}
@@ -446,6 +458,12 @@ export function ItemDetailModal(props: Props) {
                 />
               </View>
             )}
+            {status.nextAction === 'transplanted' && (
+              <View style={styles.lotBlock}>
+                <Text style={styles.countLabel}>Transplant from the greenhouse to</Text>
+                <LotPicker lots={props.lots} value={transplantLot} onChange={setTransplantLot} />
+              </View>
+            )}
             {status.nextAction && (
               <View style={styles.actionRow}>
                 <Button
@@ -453,12 +471,8 @@ export function ItemDetailModal(props: Props) {
                   variant={status.nextAction === 'sprouted' ? 'secondary' : 'primary'}
                   color={status.needsAction ? colors.warning : colors.plant}
                   onPress={() =>
-                    status.nextAction === 'transplanted' && seedlingsToTransplant !== undefined
-                      ? props.onUpdateGrowth(item.id, {
-                          ...growth!,
-                          transplantedAt: new Date().toISOString(),
-                          transplantedCount: seedlingsToTransplant,
-                        })
+                    status.nextAction === 'transplanted'
+                      ? props.onTransplant(item.id, seedlingsToTransplant, transplantLot)
                       : onAdvance(item.id, status.nextAction!)
                   }
                 />
@@ -529,7 +543,7 @@ export function ItemDetailModal(props: Props) {
             <PlantInputs
               plant={item}
               ready={ready}
-              onGive={() => setView({ kind: 'feed', given: inputsToTick(item, ready), fromCard: false })}
+              onGive={() => setView({ kind: 'feed', given: inputsToTick([item], ready), fromCard: false })}
               onSetFlowered={(flowered) => props.onSetFlowered(item.id, flowered)}
             />
           </View>
@@ -557,6 +571,27 @@ export function ItemDetailModal(props: Props) {
               {batch.headline}
             </Text>
             <BatchSteps batch={item} recipe={batch.recipe} />
+          </View>
+        )}
+
+        {item.kind === 'plant' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Lot</Text>
+            {growth?.method === 'transplant' && !growth.transplantedAt ? (
+              <Text style={styles.lotNote}>
+                🏡 In the {GREENHOUSE.toLowerCase()} until it's transplanted – pick its lot when you mark it as
+                transplanted. Water it or give it inputs with the rest of the greenhouse from the list.
+              </Text>
+            ) : (
+              <>
+                <LotPicker lots={props.lots} value={item.lot} onChange={(lot) => props.onSetLot(item.id, lot)} />
+                <Text style={styles.lotNote}>
+                  {lotOf(item)
+                    ? 'Water it or give it inputs with the rest of its lot from the list – or on its own here.'
+                    : 'Put it in a lot to water it or give it inputs together with the plants around it.'}
+                </Text>
+              </>
+            )}
           </View>
         )}
 
@@ -790,6 +825,8 @@ const styles = StyleSheet.create({
   successLine: { fontSize: 14, fontWeight: '600', color: colors.plant, marginTop: 4 },
   countBlock: { alignItems: 'center', marginTop: 16 },
   countLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  lotBlock: { marginTop: 16 },
+  lotNote: { fontSize: 13, color: colors.muted, marginTop: 8, lineHeight: 18 },
   growthHeadline: { fontSize: 17, fontWeight: '700', marginTop: 16, textAlign: 'center' },
   guideToggle: { fontSize: 15, fontWeight: '600', color: colors.water, marginTop: 16, marginBottom: 8 },
   growthNote: { fontSize: 13, color: colors.muted, marginTop: 4, textAlign: 'center' },

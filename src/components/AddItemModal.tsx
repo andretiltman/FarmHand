@@ -31,12 +31,15 @@ import { BatchSteps } from './NaturalInputs';
 import { ScheduleEditor } from './ScheduleEditor';
 import { Sheet } from './Sheet';
 import { Stepper } from './Stepper';
+import { LotPicker } from './LotPicker';
 import { TagPicker } from './TagPicker';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   onSave: (item: NewItem) => void;
+  /** Lots in use, to pick where a plant grows (see lotNames). */
+  lots: string[];
   /** Seeds on hand, so sowing can show and take from what's left. */
   seeds: SeedPacket[];
   onTakeSeeds: (packetId: string, count: number) => void;
@@ -63,7 +66,7 @@ const TASK_PRESETS: { name: string; everyDays: number; schedule?: TaskSchedule }
   { name: 'Service lawnmower', everyDays: 180 },
 ];
 
-export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onAddSeeds }: Props) {
+export function AddItemModal({ visible, onClose, onSave, lots, seeds, onTakeSeeds, onAddSeeds }: Props) {
   const [step, setStep] = useState<Step>('kind');
   const [kind, setKind] = useState<ItemKind | null>(null);
   const [name, setName] = useState('');
@@ -75,6 +78,8 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
   /** The inventory packet the sown seeds come out of; null when they're not from the inventory. */
   const [packetId, setPacketId] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
+  /** The lot a plant grows in. Tray-sown crops start in the greenhouse and get theirs when transplanted. */
+  const [lot, setLot] = useState<string | undefined>(undefined);
   const [species, setSpecies] = useState('Chicken');
   const [headCount, setHeadCount] = useState(1);
   const [names, setNames] = useState<string[]>([]);
@@ -107,6 +112,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
       setSeedsSown(1);
       setPacketId(null);
       setTags([]);
+      setLot(undefined);
       setSpecies('Chicken');
       setHeadCount(1);
       setNames([]);
@@ -132,6 +138,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
   const cropPackets = crop ? seeds.filter((p) => p.cropId === crop.id && p.count > 0) : [];
   const packet = cropPackets.find((p) => p.id === packetId);
 
+  const inGreenhouse = !!crop && method === 'transplant';
   const sequence = isInput ? INPUT_STEPS : kind && kind !== 'plant' ? SHORT_STEPS : PLANT_STEPS;
   const stepIndex = sequence.indexOf(step);
   const go = (delta: 1 | -1) => setStep(sequence[stepIndex + delta]);
@@ -210,7 +217,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
       kind === 'input'
         ? newBatch
         : kind === 'plant'
-        ? { kind, name: trimmedName, waterEveryDays, growth, tags }
+        ? { kind, name: trimmedName, waterEveryDays, growth, tags, lot: inGreenhouse ? undefined : lot }
         : kind === 'animal'
           ? {
               kind,
@@ -671,6 +678,18 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
                 ))}
               </View>
 
+              <Text style={styles.label}>Lot</Text>
+              {inGreenhouse ? (
+                <Text style={styles.hint}>
+                  🏡 Seed trays start in the greenhouse – pick the lot it goes to when you mark it as transplanted.
+                </Text>
+              ) : (
+                <>
+                  <LotPicker lots={lots} value={lot} onChange={setLot} />
+                  <Text style={styles.hint}>Optional – plants in a lot can be watered and fed together.</Text>
+                </>
+              )}
+
               <Text style={styles.label}>Tags (optional)</Text>
               <TagPicker tags={tags} onChange={setTags} />
             </>
@@ -741,6 +760,7 @@ export function AddItemModal({ visible, onClose, onSave, seeds, onTakeSeeds, onA
               {isPlant
                 ? [
                     growth && (growth.method === 'direct' ? 'Sown directly' : 'Started in a seed tray'),
+                    inGreenhouse ? '🏡 in the greenhouse' : lot && `📍 ${lot}`,
                     growth && plural(seedsSown, 'seed'),
                     `water every ${plural(waterEveryDays, 'day')}`,
                     ...tags,
