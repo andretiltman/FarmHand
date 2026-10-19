@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CARE, CareJob } from './care';
 import { StageAction } from './growth';
 import { newId } from './ids';
+import { sameLot } from './lots';
 import { deletePhoto, saveDataUrlPhoto, savePhoto } from './photoStorage';
 import { Deleted, markRemoved, mergeSnapshot, MergeResult, removedKey, stamp, SyncSnapshot } from './sync';
 import { TransferPlant } from './transfer';
@@ -374,6 +375,18 @@ export function useItems() {
     [updatePlant],
   );
 
+  /**
+   * Renames a lot: every plant in it (also tray-sown crops headed there) moves to the new name. Renaming to the
+   * name of another lot joins the two.
+   */
+  const renameLot = useCallback((from: string, to: string) => {
+    const name = to.trim();
+    if (!name) return;
+    setItems((prev) =>
+      prev.map((i) => (i.kind === 'plant' && sameLot(i.lot, from) ? stamp({ ...i, lot: name }, 'lot') : i)),
+    );
+  }, []);
+
   /** Marks a tray-sown crop as transplanted now – with how many seedlings made it, if counted – to a lot. */
   const transplant = useCallback(
     (id: string, count: number | undefined, lot: string | undefined) => {
@@ -549,6 +562,7 @@ export function useItems() {
     giveInputs,
     giveInputsTo,
     setLot,
+    renameLot,
     transplant,
     setFlowered,
     advanceBatch,
