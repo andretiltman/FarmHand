@@ -73,6 +73,7 @@ function HomeScreen() {
     waterPlants,
     logEggs,
     logCare,
+    setFeed,
     setCare,
     setCareEvery,
     setNames,
@@ -467,6 +468,7 @@ function HomeScreen() {
         onWater={waterPlant}
         onLogEggs={logEggs}
         onCare={logCare}
+        onSetFeed={setFeed}
         onSetCare={setCare}
         onSetCareEvery={setCareEvery}
         onCompleteTask={completeTask}

@@ -161,7 +161,17 @@ export function joinNames(names: string[]): string {
 }
 
 /** "Fed", "Fed all" or "Walked Annie and Harley". */
-export function careLogText(job: CareJob, log: CareLog, names: string[]): string {
-  if (log.who) return `${job.past} ${joinNames(log.who)}`;
-  return names.length > 1 && !job.forEveryone ? `${job.past} all` : job.past;
+export function careLogText(job: CareJob, log: CareLog, names: string[], unit?: string): string {
+  const text = log.who
+    ? `${job.past} ${joinNames(log.who)}`
+    : names.length > 1 && !job.forEveryone
+      ? `${job.past} all`
+      : job.past;
+  return log.amount ? `${text} · ${formatAmount(log.amount, unit)}` : text;
+}
+
+/** "2 kg", "1.5 scoops". */
+export function formatAmount(amount: number, unit?: string): string {
+  const n = Math.round(amount * 100) / 100;
+  return unit ? `${n} ${unit}` : String(n);
 }

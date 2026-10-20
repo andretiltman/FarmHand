@@ -9,15 +9,17 @@ interface Props {
   max?: number;
   suffix?: string;
   label: string;
+  /** How much − and + change the value by (e.g. 0.5 for half kilos). */
+  step?: number;
 }
 
-/** A − value + control for small whole numbers. */
-export function Stepper({ value, onChange, min = 1, max = 365, suffix, label }: Props) {
-  const set = (v: number) => onChange(Math.min(max, Math.max(min, v)));
+/** A − value + control for small whole numbers (or steps of `step`). */
+export function Stepper({ value, onChange, min = 1, max = 365, suffix, label, step = 1 }: Props) {
+  const set = (v: number) => onChange(Math.min(max, Math.max(min, Math.round(v * 100) / 100)));
   return (
     <View style={styles.row}>
       <Pressable
-        onPress={() => set(value - 1)}
+        onPress={() => set(value - step)}
         disabled={value <= min}
         style={({ pressed }) => [styles.btn, (pressed || value <= min) && styles.dim]}
         accessibilityRole="button"
@@ -30,7 +32,7 @@ export function Stepper({ value, onChange, min = 1, max = 365, suffix, label }: 
         {suffix ? <Text style={styles.suffix}> {suffix}</Text> : null}
       </Text>
       <Pressable
-        onPress={() => set(value + 1)}
+        onPress={() => set(value + step)}
         disabled={value >= max}
         style={({ pressed }) => [styles.btn, (pressed || value >= max) && styles.dim]}
         accessibilityRole="button"

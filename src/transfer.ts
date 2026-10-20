@@ -58,7 +58,9 @@ function logsFor(logs: CareLog[], names: string[]): CareLog[] {
     if (!log.who) return [log];
     const who = log.who.filter((n) => names.includes(n));
     if (who.length === 0) return [];
-    return [who.length === names.length ? { date: log.date } : { ...log, who }];
+    if (who.length < names.length) return [{ ...log, who }];
+    const { who: _, ...forAll } = log;
+    return [forAll];
   });
 }
 

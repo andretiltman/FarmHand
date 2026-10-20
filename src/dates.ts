@@ -64,3 +64,16 @@ export function formatDateTime(iso: string): string {
     month: 'short',
   }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
+
+/** Midnight at the start of the Monday-to-Sunday week `d` falls in. */
+export function startOfWeek(d: Date): Date {
+  const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  r.setDate(r.getDate() - ((r.getDay() + 6) % 7));
+  return r;
+}
+
+/** The local calendar day as "2026-10-20", for grouping logs by day. */
+export function dayKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
