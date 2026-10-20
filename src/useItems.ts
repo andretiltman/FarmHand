@@ -446,16 +446,28 @@ export function useItems() {
     [updateAnimal],
   );
 
-  /** Logs a feeding, walk, grooming, ride or clean-out as of now – for `who` of the named animals, or all of them. */
+  /**
+   * Logs a feeding, walk, grooming, ride or clean-out as of now – for `who` of the named animals, or all of them.
+   * A feeding records `amount`, or the usual amount when none is given.
+   */
   const logCare = useCallback(
-    (id: string, kind: CareKind, who?: string[]) => {
+    (id: string, kind: CareKind, who?: string[], amount?: number) => {
       const { field } = CARE[kind];
       updateAnimal(id, (a) => {
         const log: CareLog = { date: new Date().toISOString() };
         if (who && a.names.some((n) => !who.includes(n))) log.who = who;
+        const fed = kind === 'feed' ? (amount ?? a.usualFeed) : undefined;
+        if (fed && fed > 0) log.amount = fed;
         return { ...a, [field]: [log, ...a[field]] };
       });
     },
+    [updateAnimal],
+  );
+
+  /** Sets what feed is measured in and the amount usually given. */
+  const setFeed = useCallback(
+    (id: string, feedUnit: string | undefined, usualFeed: number | undefined) =>
+      updateAnimal(id, (a) => stamp({ ...a, feedUnit, usualFeed }, 'feedUnit', 'usualFeed')),
     [updateAnimal],
   );
 
@@ -526,6 +538,7 @@ export function useItems() {
     waterPlants,
     logEggs,
     logCare,
+    setFeed,
     setCare,
     setCareEvery,
     setNames,

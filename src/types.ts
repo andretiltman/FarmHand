@@ -104,6 +104,8 @@ export interface CareLog {
   date: string;
   /** The named animals it was done for; absent when it was done for all of them. */
   who?: string[];
+  /** How much food was given, in the animal's `feedUnit` (feedings only; absent when not recorded). */
+  amount?: number;
 }
 
 export interface AnimalItem extends Syncable {
@@ -130,6 +132,10 @@ export interface AnimalItem extends Syncable {
   groomings: CareLog[];
   rides: CareLog[];
   cleanings: CareLog[];
+  /** What feed amounts are measured in, e.g. "kg" or "scoops". */
+  feedUnit?: string;
+  /** The amount usually given – filled in when feeding, and logged by a card's one-tap Feed. */
+  usualFeed?: number;
   /** Photos of the animals, newest first. */
   photos: PlantPhoto[];
   createdAt: string;

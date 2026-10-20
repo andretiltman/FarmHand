@@ -11,6 +11,7 @@ import { shortSchedule, validSchedule } from '../schedule';
 import { animalSummary, DueSummary, plantSummary, taskSummary } from '../stats';
 import { colors, radius } from '../theme';
 import { AnimalItem, CareKind, Growth, hasPhotos, InputItem, TaskSchedule, TrackedItem } from '../types';
+import { AnimalStats } from './AnimalStats';
 import { Button } from './Button';
 import { CarePicker } from './CarePicker';
 import { CropGuide } from './CropGuide';
@@ -31,8 +32,10 @@ interface Props {
   onClose: () => void;
   onWater: (id: string) => void;
   onLogEggs: (id: string, count: number) => void;
-  /** `who`: which of the named animals it was for (all when absent). */
-  onCare: (id: string, kind: CareKind, who?: string[]) => void;
+  /** `who`: which of the named animals it was for (all when absent); `amount`: feed given. */
+  onCare: (id: string, kind: CareKind, who?: string[], amount?: number) => void;
+  /** Sets what an animal's feed is measured in and how much it usually gets. */
+  onSetFeed: (id: string, unit: string | undefined, usual: number | undefined) => void;
   /** Opens straight onto "who did you feed?" (from a card's quick button). */
   startCare?: CareKind | null;
   /** Opens straight onto "what did you give?" (from a plant card's Feed button). */
@@ -74,7 +77,8 @@ type View_ =
   | { kind: 'milestone'; key: MilestoneKey }
   | { kind: 'photo'; id: string }
   | { kind: 'rename' }
-  | { kind: 'care'; care: CareKind; who: string[]; fromCard: boolean }
+  | { kind: 'care'; care: CareKind; who: string[]; fromCard: boolean; amount?: number; unit?: string }
+  | { kind: 'stats' }
   | { kind: 'feed'; given: string[]; fromCard: boolean };
 
 export function ItemDetailModal(props: Props) {
@@ -95,7 +99,7 @@ export function ItemDetailModal(props: Props) {
     setShowGuide(false);
     setView(
       startCare && item?.kind === 'animal'
-        ? { kind: 'care', care: startCare, who: whoToTick(item, startCare), fromCard: true }
+        ? careView(item, startCare, true)
         : startFeed && item?.kind === 'plant'
           ? { kind: 'feed', given: inputsToTick([item], ready), fromCard: true }
           : { kind: 'main' },
@@ -224,7 +228,7 @@ export function ItemDetailModal(props: Props) {
         item[job.field].map((l, i) => ({
           key: `${job.field}-${l.date}-${i}`,
           date: l.date,
-          text: `${job.emoji}  ${careLogText(job, l, item.names)} · ${formatDateTime(l.date)}`,
+          text: `${job.emoji}  ${careLogText(job, l, item.names, item.feedUnit)} · ${formatDateTime(l.date)}`,
           undoable: true,
         })),
       ),
@@ -276,6 +280,8 @@ export function ItemDetailModal(props: Props) {
   if (view.kind === 'care' && item.kind === 'animal') {
     const job = careJob(item.species, view.care);
     const done = () => (view.fromCard ? onClose() : back());
+    const feeding = view.care === 'feed';
+    const amount = view.amount ?? 0;
     return (
       <Sheet
         visible
@@ -288,9 +294,13 @@ export function ItemDetailModal(props: Props) {
             <Button
               label={`${job.emoji}  ${job.verb}`}
               color={job.color}
-              disabled={view.who.length === 0}
+              disabled={asksWho(item, view.care) && view.who.length === 0}
               onPress={() => {
-                onCare(item.id, view.care, view.who);
+                if (feeding && (view.unit !== item.feedUnit || (amount > 0 && amount !== item.usualFeed))) {
+                  props.onSetFeed(item.id, view.unit, amount > 0 ? amount : item.usualFeed);
+                }
+                // 0 means "not measured", so the usual amount isn't filled in either.
+                onCare(item.id, view.care, asksWho(item, view.care) ? view.who : undefined, feeding ? amount : undefined);
                 done();
               }}
             />
@@ -298,8 +308,62 @@ export function ItemDetailModal(props: Props) {
         }
       >
         <ScrollView style={styles.body}>
-          <Text style={styles.sectionTitle}>Who did you {job.verb.toLowerCase()}?</Text>
-          <WhoPicker job={job} names={item.names} who={view.who} onChange={(who) => setView({ ...view, who })} />
+          {asksWho(item, view.care) && (
+            <>
+              <Text style={styles.sectionTitle}>Who did you {job.verb.toLowerCase()}?</Text>
+              <WhoPicker job={job} names={item.names} who={view.who} onChange={(who) => setView({ ...view, who })} />
+            </>
+          )}
+          {feeding && (
+            <View style={asksWho(item, view.care) ? styles.spacedTitle : undefined}>
+              <Text style={styles.sectionTitle}>How much did you give?</Text>
+              <View style={styles.unitRow}>
+                {FEED_UNITS.map((u) => (
+                  <Text
+                    key={u}
+                    onPress={() => setView({ ...view, unit: view.unit === u ? undefined : u })}
+                    style={[styles.unitChip, view.unit === u && styles.unitChipOn]}
+                    accessibilityRole="button"
+                    aria-selected={view.unit === u}
+                  >
+                    {u}
+                  </Text>
+                ))}
+              </View>
+              <View style={styles.amountRow}>
+                <Stepper
+                  label="Feed amount"
+                  value={amount}
+                  onChange={(n) => setView({ ...view, amount: n })}
+                  min={0}
+                  max={999}
+                  step={view.unit === 'kg' || view.unit === 'lb' ? 0.5 : 1}
+                  suffix={view.unit}
+                />
+              </View>
+              <Text style={styles.lotNote}>
+                {amount > 0
+                  ? 'Remembered for next time – the Feed button on the list logs this amount too.'
+                  : 'Leave at 0 to log the feeding without an amount.'}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </Sheet>
+    );
+  }
+
+  if (view.kind === 'stats' && item.kind === 'animal') {
+    return (
+      <Sheet
+        visible
+        onClose={onClose}
+        subtitle={subtitle}
+        title={`📊  ${item.name}`}
+        footer={<Button label="Back" variant="secondary" onPress={back} />}
+      >
+        <ScrollView key="stats" style={styles.body}>
+          <AnimalStats animal={item} />
         </ScrollView>
       </Sheet>
     );
@@ -689,6 +753,12 @@ export function ItemDetailModal(props: Props) {
           </View>
         )}
 
+        {item.kind === 'animal' && (
+          <View style={styles.actionRow}>
+            <Button label="📊  Stats" variant="secondary" onPress={() => setView({ kind: 'stats' })} />
+          </View>
+        )}
+
         {isPlant ? (
           <View style={styles.actionRow}>
             <Button label="💧  Watered now" color={colors.water} onPress={() => onWater(item.id)} />
@@ -721,8 +791,8 @@ export function ItemDetailModal(props: Props) {
                     label={item.care.length === 1 ? `${c.job.emoji}  ${c.job.past} now` : `${c.job.emoji} ${c.job.verb}`}
                     color={c.job.color}
                     onPress={() =>
-                      asksWho(item, c.kind)
-                        ? setView({ kind: 'care', care: c.kind, who: whoToTick(item, c.kind), fromCard: false })
+                      asksWho(item, c.kind) || c.kind === 'feed'
+                        ? setView(careView(item, c.kind, false))
                         : onCare(item.id, c.kind)
                     }
                   />
@@ -777,6 +847,21 @@ export function ItemDetailModal(props: Props) {
       </ScrollView>
     </Sheet>
   );
+}
+
+/** Units feed can be measured in. */
+const FEED_UNITS = ['kg', 'g', 'lb', 'scoops', 'cups'];
+
+/** The "who / how much" form for a job, starting from the animal's usual feed. */
+function careView(animal: AnimalItem, kind: CareKind, fromCard: boolean): View_ {
+  return {
+    kind: 'care',
+    care: kind,
+    who: whoToTick(animal, kind),
+    fromCard,
+    amount: kind === 'feed' ? (animal.usualFeed ?? 0) : undefined,
+    unit: kind === 'feed' ? animal.feedUnit : undefined,
+  };
 }
 
 /** Ticks the animals the job is due for, or everyone when it isn't due for anyone in particular. */
@@ -846,6 +931,19 @@ const styles = StyleSheet.create({
   careRow: { gap: 8 },
   eggRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 12 },
   eggBtn: { flex: 1, flexDirection: 'row' },
+  unitRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  unitChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    color: colors.text,
+    fontSize: 14,
+    overflow: 'hidden',
+  },
+  unitChipOn: { backgroundColor: colors.plant, borderColor: colors.plant, color: colors.primaryText, fontWeight: '700' },
+  amountRow: { alignItems: 'center' },
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, marginBottom: 8 },
   historyTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
   undo: { fontSize: 14, color: colors.water, fontWeight: '600' },
