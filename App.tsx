@@ -1,7 +1,7 @@
 import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { asksWho } from './src/care';
@@ -9,6 +9,7 @@ import { AddItemModal } from './src/components/AddItemModal';
 import { HomeAssistantModal } from './src/components/HomeAssistantModal';
 import { ItemCard } from './src/components/ItemCard';
 import { ItemDetailModal } from './src/components/ItemDetailModal';
+import { LotDetailModal } from './src/components/LotDetailModal';
 import { LotFeedModal } from './src/components/LotFeedModal';
 import { SeedsModal } from './src/components/SeedsModal';
 import { TransferModal } from './src/components/TransferModal';
@@ -20,6 +21,7 @@ import { colors, radius } from './src/theme';
 import { CareKind, TrackedItem } from './src/types';
 import { useHomeAssistant } from './src/useHomeAssistant';
 import { useItems } from './src/useItems';
+import { useLots } from './src/useLots';
 import { useSeeds } from './src/useSeeds';
 
 /**
@@ -84,6 +86,7 @@ function HomeScreen() {
     giveInputs,
     giveInputsTo,
     setLot,
+    renameLot,
     transplant,
     setFlowered,
     advanceBatch,
@@ -96,6 +99,7 @@ function HomeScreen() {
     undoLast,
   } = useItems();
   const seeds = useSeeds();
+  const lotInfo = useLots();
   const homeAssistant = useHomeAssistant(items, loaded, { itemsRef, deletedRef, applySnapshot });
   const [adding, setAdding] = useState(false);
   const [linking, setLinking] = useState(false);
@@ -110,6 +114,8 @@ function HomeScreen() {
   const [startFeed, setStartFeed] = useState(false);
   /** Set when a lot heading's Feed button opens the popup to pick what was given to the whole lot. */
   const [feedingLot, setFeedingLot] = useState<string | null>(null);
+  /** Set when a lot heading is tapped, to show the lot's details. */
+  const [viewingLot, setViewingLot] = useState<string | null>(null);
   const [sectionKey, setSectionKey] = useState<SectionKey>('overview');
   /** Overview groups that are opened up to show their items (they start closed, showing just a count). */
   const [openGroups, setOpenGroups] = useState<SectionKey[]>([]);
@@ -288,17 +294,28 @@ function HomeScreen() {
               const inLot = plantsInLot(items, lot);
               const due = inLot.filter((p) => plantSummary(p).status !== 'ok').length;
               const plants = `${inLot.length} plant${inLot.length === 1 ? '' : 's'}`;
+              const lotPhoto = lotInfo.photosOf(lot)[0];
               return (
                 <View style={styles.lot}>
-                  <View style={styles.flexShrink}>
-                    <Text style={styles.lotName} numberOfLines={1}>
-                      {lotEmoji(lot)} {lot}
-                    </Text>
-                    <Text style={[styles.lotSub, due > 0 && { color: colors.warning }]} numberOfLines={1}>
-                      {inLot.length ? plants : 'Nothing growing'}
-                      {due > 0 ? ` · 💧 ${due} due` : ''}
-                    </Text>
-                  </View>
+                  <Pressable
+                    onPress={() => setViewingLot(lot)}
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.lotInfo, pressed && { opacity: 0.6 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${lot}, ${plants}. Show lot details`}
+                  >
+                    {lotPhoto && <Image source={{ uri: lotPhoto.uri }} style={styles.lotPhoto} />}
+                    <View style={styles.flexShrink}>
+                      <Text style={styles.lotName} numberOfLines={1}>
+                        {lotPhoto ? '' : `${lotEmoji(lot)} `}
+                        {lot} <Text style={styles.lotChevron}>›</Text>
+                      </Text>
+                      <Text style={[styles.lotSub, due > 0 && { color: colors.warning }]} numberOfLines={1}>
+                        {inLot.length ? plants : 'Nothing growing'}
+                        {due > 0 ? ` · 💧 ${due} due` : ''}
+                      </Text>
+                    </View>
+                  </Pressable>
                   {inLot.length > 0 && (
                   <>
                   <Pressable
@@ -428,6 +445,31 @@ function HomeScreen() {
           setSendPacketId(id);
           setTransferring(true);
         }}
+      />
+      <LotDetailModal
+        lot={viewingLot}
+        items={items}
+        photos={viewingLot ? lotInfo.photosOf(viewingLot) : []}
+        onClose={() => setViewingLot(null)}
+        onOpenPlant={(id) => {
+          setViewingLot(null);
+          setStartCare(null);
+          setStartFeed(false);
+          setSelectedId(id);
+        }}
+        onWater={waterPlants}
+        onFeed={() => {
+          setFeedingLot(viewingLot);
+          setViewingLot(null);
+        }}
+        onRename={(from, to) => {
+          renameLot(from, to);
+          lotInfo.renameLotInfo(from, to);
+          setViewingLot(lots.find((l) => lotKey(l) === lotKey(to)) ?? to.trim());
+        }}
+        onAddPhoto={(uri) => lotInfo.addLotPhoto(viewingLot!, uri)}
+        onSetPhotoDate={(photoId, takenAt) => lotInfo.setLotPhotoDate(viewingLot!, photoId, takenAt)}
+        onRemovePhoto={(photoId) => lotInfo.removeLotPhoto(viewingLot!, photoId)}
       />
       <LotFeedModal
         lot={feedingLot}
@@ -572,6 +614,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   flexShrink: { flex: 1, minWidth: 0 },
+  lotInfo: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lotPhoto: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface },
+  lotChevron: { color: colors.muted, fontWeight: '600' },
   lotName: { fontSize: 15, fontWeight: '800', color: colors.text },
   lotSub: { fontSize: 12, fontWeight: '600', color: colors.muted, marginTop: 1 },
   lotAction: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.sm },

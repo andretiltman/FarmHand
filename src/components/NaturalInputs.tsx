@@ -18,71 +18,43 @@ import {
 } from '../natural';
 import { colors, radius } from '../theme';
 import { InputItem, PlantItem } from '../types';
-import { Button } from './Button';
 
-interface PlantInputsProps {
+interface FeedStageProps {
   plant: PlantItem;
-  ready: Set<string>;
-  onGive: () => void;
   onSetFlowered: (flowered: boolean) => void;
 }
 
-/** A plant's stage of growth, the natural inputs that suit it, and when each was last given. */
-export function PlantInputs({ plant, ready, onGive, onSetFlowered }: PlantInputsProps) {
+/** A plant's stage of growth in the feeding cycle, with a button to mark it flowering. */
+export function FeedStageCard({ plant, onSetFlowered }: FeedStageProps) {
   const stage = feedStage(plant);
-  const recommended = recommendedInputs(plant, ready);
   const info = stage && FEED_STAGES[stage.stage];
   const flowered = plant.growth?.floweredAt;
 
+  if (!info) {
+    return (
+      <Text style={[styles.muted, styles.spaced]}>
+        {plant.growth
+          ? 'Seeds and harvested crops don’t need inputs.'
+          : 'Give natural inputs whenever it suits – LAB is good for any plant.'}
+      </Text>
+    );
+  }
   return (
-    <View>
-      {info ? (
-        <View style={styles.stage}>
-          <Text style={styles.stageTitle}>
-            {info.emoji} {info.label}
-          </Text>
-          <Text style={styles.muted}>
-            {info.about}
-            {stage.note ? ` · ${stage.note}` : ''}
-          </Text>
-          {flowered ? (
-            <Text style={styles.muted}>🌼 Flowering since {formatShortDate(new Date(flowered))}</Text>
-          ) : stage.flowering ? (
-            <Text style={styles.link} onPress={() => onSetFlowered(true)} accessibilityRole="button">
-              🌼 It has started flowering
-            </Text>
-          ) : null}
-        </View>
-      ) : (
-        <Text style={[styles.muted, styles.spaced]}>
-          {plant.growth
-            ? 'Seeds and harvested crops don’t need inputs.'
-            : 'Give natural inputs whenever it suits – LAB is good for any plant.'}
+    <View style={styles.stage}>
+      <Text style={styles.stageTitle}>
+        {info.emoji} {info.label}
+      </Text>
+      <Text style={styles.muted}>
+        {info.about}
+        {stage.note ? ` · ${stage.note}` : ''}
+      </Text>
+      {flowered ? (
+        <Text style={styles.muted}>🌼 Flowering since {formatShortDate(new Date(flowered))}</Text>
+      ) : stage.flowering ? (
+        <Text style={styles.link} onPress={() => onSetFlowered(true)} accessibilityRole="button">
+          🌼 It has started flowering
         </Text>
-      )}
-
-      {recommended.map((r) => {
-        const due = r.status !== 'ok';
-        return (
-          <View key={r.key} style={styles.row}>
-            <Text style={styles.rowEmoji}>{r.recipe.emoji}</Text>
-            <View style={styles.shrink}>
-              <Text style={styles.rowTitle}>
-                {r.recipe.short} <Text style={styles.rowName}>· {r.recipe.name}</Text>
-              </Text>
-              <Text style={styles.muted}>{doseText(r.recipe)}</Text>
-              {!r.haveReady && <Text style={styles.muted}>No batch ready – start one with ＋ Add → Natural input</Text>}
-            </View>
-            <Text style={[styles.rowStatus, { color: due && r.haveReady ? colors.warning : due ? colors.muted : colors.plant }]}>
-              {r.last ? `Given ${relativeDay(r.last)}` : 'Not given yet'}
-            </Text>
-          </View>
-        );
-      })}
-
-      <View style={styles.actionRow}>
-        <Button label="🧪  Give natural inputs" color={colors.input} onPress={onGive} />
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -140,6 +112,7 @@ export function InputPicker({ plants, choices, ready, given, onChange }: PickerP
                 ? 'Suits all of them'
                 : `Suits ${suits.get(key)} of ${plants.length}`,
           ready.has(key) ? 'Batch ready' : null,
+          plants.length === 1 ? lastGivenText(plants[0], key) : null,
         ].filter(Boolean);
         return (
           <Pressable
@@ -165,6 +138,12 @@ export function InputPicker({ plants, choices, ready, given, onChange }: PickerP
       <Text style={styles.preview}>{given.length ? `🧪 ${mixText(given)}` : 'Tick at least one'}</Text>
     </View>
   );
+}
+
+/** When the plant was last given an input: "Given 3 days ago" or "Not given yet". */
+function lastGivenText(plant: PlantItem, key: string): string {
+  const last = plant.inputs.find((l) => l.given.includes(key))?.date;
+  return last ? `Given ${relativeDay(last)}` : 'Not given yet';
 }
 
 /**
@@ -218,19 +197,9 @@ const styles = StyleSheet.create({
   link: { fontSize: 14, fontWeight: '600', color: colors.input, marginTop: 8 },
   stage: { backgroundColor: colors.inputSoft, borderRadius: radius.sm, padding: 12, marginBottom: 8 },
   stageTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
   rowEmoji: { fontSize: 22 },
   rowTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
   rowName: { fontWeight: '400', color: colors.muted },
-  rowStatus: { fontSize: 13, fontWeight: '600', textAlign: 'right', maxWidth: 110 },
-  actionRow: { flexDirection: 'row', marginTop: 12 },
   pickRow: {
     flexDirection: 'row',
     alignItems: 'center',

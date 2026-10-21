@@ -19,7 +19,7 @@ import { Journey } from './Journey';
 import { LotPicker } from './LotPicker';
 import { MilestoneEditor } from './MilestoneEditor';
 import { NamesEditor, WhoPicker } from './NamePicker';
-import { BatchSteps, InputPicker, inputChoices, inputsToTick, PlantInputs } from './NaturalInputs';
+import { BatchSteps, FeedStageCard, InputPicker, inputChoices, inputsToTick } from './NaturalInputs';
 import { PhotoLog } from './PhotoLog';
 import { PhotoViewer } from './PhotoViewer';
 import { ScheduleEditor } from './ScheduleEditor';
@@ -393,7 +393,8 @@ export function ItemDetailModal(props: Props) {
         }
       >
         <ScrollView style={styles.body}>
-          <Text style={styles.sectionTitle}>What did you give?</Text>
+          <FeedStageCard plant={item} onSetFlowered={(flowered) => props.onSetFlowered(item.id, flowered)} />
+          <Text style={[styles.sectionTitle, styles.spacedTitle]}>What did you give?</Text>
           <InputPicker
             plants={[item]}
             choices={inputChoices([item], props.batches, ready)}
@@ -604,12 +605,13 @@ export function ItemDetailModal(props: Props) {
         {item.kind === 'plant' && (growth || props.batches.length > 0 || item.inputs.length > 0) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Natural inputs</Text>
-            <PlantInputs
-              plant={item}
-              ready={ready}
-              onGive={() => setView({ kind: 'feed', given: inputsToTick([item], ready), fromCard: false })}
-              onSetFlowered={(flowered) => props.onSetFlowered(item.id, flowered)}
-            />
+            <View style={styles.inputRow}>
+              <Button
+                label="🧪  Add natural inputs"
+                color={colors.input}
+                onPress={() => setView({ kind: 'feed', given: inputsToTick([item], ready), fromCard: false })}
+              />
+            </View>
           </View>
         )}
 
@@ -905,6 +907,7 @@ const styles = StyleSheet.create({
   batchHeadline: { marginTop: 12, marginBottom: 8 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 8 },
   spacedTitle: { marginTop: 20 },
+  inputRow: { flexDirection: 'row' },
   seedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   seedLabel: { fontSize: 14, color: colors.text },
   successLine: { fontSize: 14, fontWeight: '600', color: colors.plant, marginTop: 4 },
